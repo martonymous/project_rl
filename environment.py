@@ -82,6 +82,8 @@ class DamWorldEnv(gym.Env):
             self.index += 1
 
             flow_mult = self.flow_multiplier[action[1]]
+            cash_delta = self.cash
+
             # we can only sell if there is water in the dam
             if action[0] == 0 and self.water_level != 0:
                 if self.water_level > (flow_mult * self.flow_rate):
@@ -101,7 +103,7 @@ class DamWorldEnv(gym.Env):
                     
         observation = self._get_obs()
         info = self._get_info()
-        reward = info["theoretical_profit"]
+        reward = self.cash - cash_delta
 
         return observation, reward, terminated, False, info
 
@@ -126,10 +128,14 @@ if __name__ == "__main__":
 
     data = pd.read_csv('data/train_processed.csv')
     env = DamWorldEnv(observation_data=data)
+    low = env.observation_space["time_hour"].low
+    high = env.observation_space["time_hour"].high
 
-    obs, inf = env.reset()
-    print(obs)
-    for _ in range(10000):
-        obs, reward, term, trunc, inf = env.step(env.action_space.sample())
-    print(obs)
-    print(reward)
+    print(high)
+
+    # obs, inf = env.reset()
+    # print(obs)
+    # for _ in range(10):
+    #     obs, reward, term, trunc, inf = env.step(env.action_space.sample())
+    # print(obs)
+    # print(reward)
