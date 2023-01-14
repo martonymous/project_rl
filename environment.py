@@ -69,19 +69,20 @@ class DamWorldEnv(gym.Env):
         return {
             "profit": self.cash - self.starting_cash,
             "unrealized_profit": self.water_level * self.electricity_cost * self.sell_efficiency,
-            "theoretical_proft": (self.cash - self.starting_cash) + (self.water_level * self.electricity_cost * self.sell_efficiency)
+            "theoretical_profit": (self.cash - self.starting_cash) + (self.water_level * self.electricity_cost * self.sell_efficiency)
         }
     
 
-    def step(self, action):
+    def step(self, action, terminated=False):
         # first check if simulation terminates, otherwise move index and perform action
-        if self.index == self.data.shape[0] or (self.water_level == 0 and self.cash == 0):
+        if (self.index+1) == self.data.shape[0] or (self.water_level == 0 and self.cash == 0):
             terminated = True
         else:
             # otherwise continue
             self.index += 1
 
             flow_mult = self.flow_multiplier[action[1]]
+            # we can only sell if there is water in the dam
             if action[0] == 0 and self.water_level != 0:
                 if self.water_level > (flow_mult * self.flow_rate):
                     self.cash += self.electricity_cost * self.sell_efficiency * flow_mult * self.flow_rate
@@ -89,7 +90,8 @@ class DamWorldEnv(gym.Env):
                 else:
                     self.cash += self.electricity_cost * self.sell_efficiency * self.water_level
                     self.water_level = 0
-            elif action[0] == 1 and self.water_level < self.water_capacity:
+            # we can only buy if we have cash and if dam is not full
+            elif action[0] == 1 and self.water_level < self.water_capacity and self.cash > (self.electricity_cost * self.sell_efficiency * (self.water_capacity - self.water_level)):
                 if (self.water_capacity - self.water_level) > (flow_mult * self.flow_rate):
                     self.cash -= self.electricity_cost * self.buy_efficiency * flow_mult * self.flow_rate
                     self.water_level += flow_mult * self.flow_rate
@@ -120,23 +122,14 @@ class DamWorldEnv(gym.Env):
         info = self._get_info()
         return observation, info
 
+if __name__ == "__main__":
 
-    def render(self, mode='human'):
-        # TODO
-        ...
+    data = pd.read_csv('data/train_processed.csv')
+    env = DamWorldEnv(observation_data=data)
 
-
-    def close(self):
-        # TODO
-        ...
-
-register(
-     id="gym_examples/DamWorld-v0",
-     entry_point="gym_examples.envs:DamWorldEnv",
-     max_episode_steps=5000,
-)
-
-data = pd.read_csv('data/train_processed.csv')
-env = DamWorldEnv(observation_data=data)
-
-print(env.observation_space)
+    obs, inf = env.reset()
+    print(obs)
+    for _ in range(10000):
+        obs, reward, term, trunc, inf = env.step(env.action_space.sample())
+    print(obs)
+    print(reward)
