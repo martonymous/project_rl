@@ -104,6 +104,7 @@ class DamWorldEnv(gym.Env):
         observation = self._get_obs()
         info = self._get_info()
         reward = self.cash - cash_delta
+        print(reward)
 
         return observation, reward, terminated, False, info
 
