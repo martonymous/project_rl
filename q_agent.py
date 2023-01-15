@@ -46,7 +46,6 @@ class QAgent():
         Returns:
         discretized state
         '''
-        #Now we can make use of the function np.digitize and bin it
         self.state = state
         binned_states = [
             "electricity_cost",
@@ -55,29 +54,29 @@ class QAgent():
     
         for i in range(len(self.bins)):
             state[binned_states[i]] = np.digitize(self.state[binned_states[i]], self.bins[i])-1
-        
-        #Returns the discretized state from an observation
+
         return state
     
     def create_Q_table(self):
         self.state_space = self.bin_size - 1
         #Initialize all values in the Q-table to zero
-        
-        '''
-        ToDo:
-        Initialize a zero matrix of dimension state_space * state_space * action_space and call it self.Qtable!
-        '''
-        
-        #Solution:
-        self.Qtable = np.zeros((self.bin_size-1, self.env.water_level_dim, self.env.time_hour_dim, self.env.time_day_dim, self.env.time_week_dim, self.env.time_month_dim, self.action_space1, self.action_space2))
+        self.Qtable = np.zeros((
+            self.bin_size, 
+            self.env.water_level_dim, 
+            self.env.time_hour_dim, 
+            self.env.time_day_dim, 
+            self.env.time_week_dim, 
+            self.env.time_month_dim, 
+            self.action_space1, 
+            self.action_space2
+        ))
         
 
-    def train(self, simulations, learning_rate, epsilon = 0.05, epsilon_decay = 1000, adaptive_epsilon = False, 
+    def train(self, simulations, learning_rate, episodes = 1000, epsilon = 0.05, epsilon_decay = 1000, adaptive_epsilon = False, 
               adapting_learning_rate = False):
         
         '''
         Params:
-        
         simulations = number of episodes of a game to run
         learning_rate = learning rate for the update equation
         epsilon = epsilon value for epsilon-greedy algorithm
@@ -110,7 +109,7 @@ class QAgent():
         
         for i in range(simulations):
             
-            if i % 5000 == 0:
+            if i % 250 == 0:
                 print(f'Please wait, the algorithm is learning! The current simulation is {i}')
             #Initialize the state
             state = self.env.reset()[0]   # reset returns a dict, need to take the 0th entry.
@@ -134,47 +133,80 @@ class QAgent():
                     print(f"The current epsilon rate is {self.epsilon}")
                 
             #Loop until an episode has terminated
-            while not done:
+            episode = 0
+            while (not done) or (episode < episodes):
+                episode += 1
                 
-                #Pick an action based on epsilon greedy
-                
-                '''
-                ToDo: Write the if statement that picks a random action
-                Tip: Make use of np.random.uniform() and the self.epsilon to make a decision!
-                Tip: You can also make use of the method sample() of the self.env.action_space 
-                    to generate a random action!
-                '''
-                
-                #Solution:
-                
+                # Epsilon greedy
                 #Pick random action
                 if np.random.uniform(0,1) > 1-self.epsilon:
                     #This picks a random action from 0,1,2
                     action = self.env.action_space.sample()
-                    
-                    
+
                 #Pick a greedy action
                 else:
-                    a = self.Qtable[state["electricity_cost"], state["water_level"], state["time_hour"], state["time_day"], state["time_week"], state["time_month"], :, :]
+                    a = self.Qtable[
+                        state["electricity_cost"], 
+                        state["water_level"], 
+                        state["time_hour"], 
+                        state["time_day"], 
+                        state["time_week"], 
+                        state["time_month"], :, :
+                        ]
                     action = np.unravel_index(np.argmax(a), a.shape)
                     
                 #Now sample the next_state, reward, done and info from the environment
                 
                 next_state, reward, terminated, truncated, info = self.env.step(action) # step returns 5 outputs
-                print(next_state)
                 done =  terminated or truncated
                 
                 #Now discretize the next_state
                 next_state = self.discretize_state(next_state)
                 
                 #Target value 
-                Q_target = (reward + self.discount_rate*np.max(self.Qtable[next_state[0], next_state[1]]))
+                Q_target = (
+                    reward + self.discount_rate*np.max(self.Qtable[
+                        state["electricity_cost"], 
+                        state["water_level"], 
+                        state["time_hour"], 
+                        state["time_day"], 
+                        state["time_week"], 
+                        state["time_month"]
+                    ])
+                )
                 
                 #Calculate the Temporal difference error (delta)
-                delta = self.learning_rate * (Q_target - self.Qtable[state[0], state[1], action])
+                delta = self.learning_rate * (Q_target - self.Qtable[
+                    state["electricity_cost"], 
+                    state["water_level"], 
+                    state["time_hour"], 
+                    state["time_day"], 
+                    state["time_week"], 
+                    state["time_month"],
+                    action[0],
+                    action[1]
+                ])
                 
                 #Update the Q-value
-                self.Qtable[state[0], state[1], action] = self.Qtable[state[0], state[1], action] + delta
+                self.Qtable[
+                    state["electricity_cost"], 
+                    state["water_level"], 
+                    state["time_hour"], 
+                    state["time_day"], 
+                    state["time_week"], 
+                    state["time_month"],
+                    action[0],
+                    action[1]
+                ] = self.Qtable[
+                    state["electricity_cost"], 
+                    state["water_level"], 
+                    state["time_hour"], 
+                    state["time_day"], 
+                    state["time_week"], 
+                    state["time_month"],
+                    action[0],
+                    action[1]
+                ] + delta
                 
                 #Update the reward and the hyperparameters
                 total_rewards += reward
@@ -209,4 +241,4 @@ if __name__ == "__main__":
     
     data = pd.read_csv('data/train_processed.csv')
     agent_standard_greedy = QAgent(DamWorldEnv, data=data)
-    agent_standard_greedy.train(2, 0.1)
+    agent_standard_greedy.train(2000, 0.1)

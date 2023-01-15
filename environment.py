@@ -74,6 +74,7 @@ class DamWorldEnv(gym.Env):
     
 
     def step(self, action, terminated=False):
+        cash_delta = self.cash
         # first check if simulation terminates, otherwise move index and perform action
         if (self.index+1) == self.data.shape[0] or (self.water_level == 0 and self.cash == 0):
             terminated = True
@@ -82,7 +83,6 @@ class DamWorldEnv(gym.Env):
             self.index += 1
 
             flow_mult = self.flow_multiplier[action[1]]
-            cash_delta = self.cash
 
             # we can only sell if there is water in the dam
             if action[0] == 0 and self.water_level != 0:
@@ -128,14 +128,11 @@ if __name__ == "__main__":
 
     data = pd.read_csv('data/train_processed.csv')
     env = DamWorldEnv(observation_data=data)
-    low = env.observation_space["time_hour"].low
-    high = env.observation_space["time_hour"].high
 
-    print(high)
-
-    # obs, inf = env.reset()
-    # print(obs)
-    # for _ in range(10):
-    #     obs, reward, term, trunc, inf = env.step(env.action_space.sample())
-    # print(obs)
-    # print(reward)
+    # test environment
+    obs, inf = env.reset()
+    print(obs)
+    for _ in range(10):
+        obs, reward, term, trunc, inf = env.step(env.action_space.sample())
+    print(obs)
+    print(reward)
