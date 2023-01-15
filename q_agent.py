@@ -35,7 +35,7 @@ class QAgent():
     
         # Create bins for continuous observation features, i.e. price and water level
         self.bin_prices = np.linspace(0, self.env.data["prices"].max(), self.bin_size)
-        self.bin_water_level = np.linspace(0, 100000, self.env.water_level_dim+1)
+        self.bin_water_level = np.linspace(0, 100000, self.env.water_level_dim)
         self.bins = [self.bin_prices, self.bin_water_level]
     
     def discretize_state(self, state):
@@ -164,23 +164,9 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         
         #Update the Q-value
         agent.Qtable[
-            state["electricity_cost"], 
-            state["water_level"], 
-            state["time_hour"], 
-            state["time_day"], 
-            state["time_week"], 
-            state["time_month"],
-            action[0],
-            action[1]
+            state["electricity_cost"], state["water_level"], state["time_hour"], state["time_day"], state["time_week"], state["time_month"], action[0], action[1]
         ] = agent.Qtable[
-            state["electricity_cost"], 
-            state["water_level"], 
-            state["time_hour"], 
-            state["time_day"], 
-            state["time_week"], 
-            state["time_month"],
-            action[0],
-            action[1]
+            state["electricity_cost"], state["water_level"], state["time_hour"], state["time_day"], state["time_week"], state["time_month"], action[0], action[1]
         ] + delta
         
         #Update the reward and the hyperparameters
@@ -255,5 +241,5 @@ if __name__ == "__main__":
     
     data = pd.read_csv('data/train_processed.csv')
     agent_standard_greedy = QAgent(data=data)
-    train(agent_standard_greedy, 10000, 0.1, 100, max_workers=8, multiprocessing=False)
+    train(agent_standard_greedy, 20000, 0.1, 336, max_workers=8, multiprocessing=False)
     agent_standard_greedy.visualize_rewards()

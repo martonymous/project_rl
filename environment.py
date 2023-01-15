@@ -30,7 +30,7 @@ class DamWorldEnv(gym.Env):
         self.time_day_dim = 7
         self.time_week_dim = 53
         self.time_month_dim = 12
-        self.water_level_dim = 20
+        self.water_level_dim = 21
         self.water_capacity = self.flow_rate * self.water_level_dim
 
         self.action_space = spaces.MultiDiscrete([len(self.Actions), len(self.flow_multiplier)])
@@ -46,7 +46,6 @@ class DamWorldEnv(gym.Env):
             }
         )
 
-
     def _get_obs(self):
         self.hour = self.data["hour"].iloc[self.index]
         self.day = self.data["day"].iloc[self.index]
@@ -61,9 +60,9 @@ class DamWorldEnv(gym.Env):
             "time_month": self.month,
             "water_level": self.water_level,
             "electricity_cost": self.electricity_cost,
-            "cash": self.cash
+            "cash": self.cash,
+            "value": self.value
         }
-    
     
     def _get_info(self):
         return {
@@ -72,9 +71,9 @@ class DamWorldEnv(gym.Env):
             "theoretical_profit": (self.cash - self.starting_cash) + (self.water_level * self.electricity_cost * self.sell_efficiency)
         }
     
-
     def step(self, action, terminated=False):
-        cash_delta = self.cash
+        info = self._get_info()
+        previous_total_value = info["theoretical_profit"]
         # first check if simulation terminates, otherwise move index and perform action
         if (self.index+1) == self.data.shape[0] or (self.water_level == 0 and self.cash == 0):
             terminated = True
@@ -103,11 +102,10 @@ class DamWorldEnv(gym.Env):
                     
         observation = self._get_obs()
         info = self._get_info()
-        reward = self.cash - cash_delta
-        print(reward)
+        self.value = info["theoretical_profit"]
+        reward = info["theoretical_profit"] - previous_total_value
 
         return observation, reward, terminated, False, info
-
 
     def reset(self):
         self.index = random.randint(0, len(self.data) - 50)
@@ -120,6 +118,7 @@ class DamWorldEnv(gym.Env):
         self.starting_cash = 0  # (arbitrary) amount of cash
         self.cash = self.starting_cash
         self.electricity_cost = self.data["prices"].iloc[self.index]
+        self.value = self.starting_cash + (self.electricity_cost * self.water_level)
         
         observation = self._get_obs()
         info = self._get_info()
