@@ -91,6 +91,7 @@ class DamWorldEnv(gym.Env):
                 else:
                     self.cash += self.electricity_cost * self.sell_efficiency * self.water_level
                     self.water_level = 0
+                    
             # we can only buy if we have cash and if dam is not full
             elif action[0] == 1 and self.water_level < self.water_capacity and self.cash > (self.electricity_cost * self.sell_efficiency * (self.water_capacity - self.water_level)):
                 if (self.water_capacity - self.water_level) > (flow_mult * self.flow_rate):
