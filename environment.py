@@ -32,6 +32,8 @@ class DamWorldEnv(gym.Env):
         self.time_month_dim = 12
         self.water_level_dim = 21
         self.water_capacity = self.flow_rate * self.water_level_dim
+        # for converting water level (m³) to MWh
+        self.conversion_factor = 9.81 * 30 * (2 + (7/9)) * 10^-10
 
         self.action_space = spaces.MultiDiscrete([len(self.Actions), len(self.flow_multiplier)])
         self.observation_space = spaces.Dict(
@@ -86,19 +88,19 @@ class DamWorldEnv(gym.Env):
             # we can only sell if there is water in the dam
             if action[0] == 0 and self.water_level != 0:
                 if self.water_level > (flow_mult * self.flow_rate):
-                    self.cash += self.electricity_cost * self.sell_efficiency * flow_mult * self.flow_rate
+                    self.cash += self.electricity_cost * self.sell_efficiency * flow_mult * self.flow_rate * self.conversion_factor
                     self.water_level -= flow_mult * self.flow_rate
                 else:
-                    self.cash += self.electricity_cost * self.sell_efficiency * self.water_level
+                    self.cash += self.electricity_cost * self.sell_efficiency * self.water_level * self.conversion_factor
                     self.water_level = 0
                     
             # we can only buy if we have cash and if dam is not full
             elif action[0] == 1 and self.water_level < self.water_capacity and self.cash > (self.electricity_cost * self.sell_efficiency * (self.water_capacity - self.water_level)):
                 if (self.water_capacity - self.water_level) > (flow_mult * self.flow_rate):
-                    self.cash -= self.electricity_cost * self.buy_efficiency * flow_mult * self.flow_rate
+                    self.cash -= self.electricity_cost * self.buy_efficiency * flow_mult * self.flow_rate * self.conversion_factor
                     self.water_level += flow_mult * self.flow_rate
                 else:
-                    self.cash -= self.electricity_cost * self.sell_efficiency * (self.water_capacity - self.water_level)
+                    self.cash -= self.electricity_cost * self.sell_efficiency * (self.water_capacity - self.water_level) * self.conversion_factor
                     self.water_level = self.water_capacity
                     
         observation = self._get_obs()
