@@ -236,10 +236,19 @@ def train(agent, simulations, learning_rate, episodes = 1000, epsilon = 0.05, ep
                 simulate(agent, i, 1000, 0.1)
 
         print('The simulation is done!')
-        
-if __name__ == "__main__":
-    
+
+def train_agent():
     data = pd.read_csv('data/train_processed.csv')
     agent_standard_greedy = QAgent(data=data)
     train(agent_standard_greedy, 20000, 0.1, 336, max_workers=8, multiprocessing=False)
     agent_standard_greedy.visualize_rewards()
+
+def test_agent():
+    data = pd.read_csv('data/val_processed.csv')
+    agent_standard_greedy = QAgent(data=data)
+    train(agent_standard_greedy, 20000, 0.1, 336, max_workers=8, multiprocessing=False)
+    agent_standard_greedy.visualize_rewards()
+
+if __name__ == "__main__":
+    
+    test_agent()
