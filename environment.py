@@ -33,7 +33,7 @@ class DamWorldEnv(gym.Env):
         self.water_level_dim = 21
         self.water_capacity = self.flow_rate * self.water_level_dim
         # for converting water level (m³) to MWh
-        self.conversion_factor = 9.81 * 30 * (2 + (7/9)) * 10^-10
+        self.conversion_factor = 9.81 * 30 * (2 + (7/9)) * (10 ** -10)
 
         self.action_space = spaces.MultiDiscrete([len(self.Actions), len(self.flow_multiplier)])
         self.observation_space = spaces.Dict(
