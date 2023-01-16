@@ -65,8 +65,7 @@ class QAgent():
             self.bin_size, 
             self.env.water_level_dim, 
             self.env.time_hour_dim, 
-            self.env.time_day_dim, 
-            self.env.time_week_dim, 
+            self.env.time_day_dim,
             self.env.time_month_dim, 
             self.action_space1, 
             self.action_space2
@@ -125,15 +124,23 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
                 state["electricity_cost"], 
                 state["water_level"], 
                 state["time_hour"], 
-                state["time_day"], 
-                state["time_week"], 
+                state["time_day"],
                 state["time_month"], :, :
                 ]
             action = np.unravel_index(np.argmax(a), a.shape)
             
-        #Now sample the next_state, reward, done and info from the environment
-        
+        #Now sample the next_state, reward, done and info from the environment        
         next_state, reward, terminated, truncated, info = agent.env.step(action) # step returns 5 outputs
+
+        done =  terminated or truncated
+        if episode == episodes:
+            done = True
+
+        if done:
+            reward = info["theoretical_profit"]
+        else:
+            # apply different reward, if desired
+            reward = reward
         
         #Now discretize the next_state
         next_state = agent.discretize_state(next_state)
@@ -144,8 +151,7 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
                 state["electricity_cost"], 
                 state["water_level"], 
                 state["time_hour"], 
-                state["time_day"], 
-                state["time_week"], 
+                state["time_day"],
                 state["time_month"]
             ])
         )
@@ -155,8 +161,7 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
             state["electricity_cost"], 
             state["water_level"], 
             state["time_hour"], 
-            state["time_day"], 
-            state["time_week"], 
+            state["time_day"],
             state["time_month"],
             action[0],
             action[1]
@@ -164,24 +169,20 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         
         #Update the Q-value
         agent.Qtable[
-            state["electricity_cost"], state["water_level"], state["time_hour"], state["time_day"], state["time_week"], state["time_month"], action[0], action[1]
+            state["electricity_cost"], state["water_level"], state["time_hour"], state["time_day"], state["time_month"], action[0], action[1]
         ] = agent.Qtable[
-            state["electricity_cost"], state["water_level"], state["time_hour"], state["time_day"], state["time_week"], state["time_month"], action[0], action[1]
+            state["electricity_cost"], state["water_level"], state["time_hour"], state["time_day"], state["time_month"], action[0], action[1]
         ] + delta
         
         #Update the reward and the hyperparameters
         total_rewards += reward
         state = next_state
-
-        done =  terminated or truncated
-        if episode == episodes:
-            done = True
     
     agent.rewards.append(total_rewards)
     print(state)
 
     #Calculate the average score over 100 episodes
-    if i % 100 == 0:
+    if i % 20 == 0:
         agent.average_rewards.append(np.mean(agent.rewards))
         
         #Initialize a new reward list, as otherwise the average values would reflect all rewards!
@@ -217,8 +218,8 @@ def train(agent, simulations, learning_rate, episodes = 1000, epsilon = 0.05, ep
         agent.adaptive_epsilon = adaptive_epsilon
         
         #Set start epsilon, so here we want a starting exploration rate of 1
-        agent.epsilon_start = 1
-        agent.epsilon_end = 0.05
+        agent.epsilon_start = 0.5
+        agent.epsilon_end = 0.01
         
         #If we choose adaptive learning rate, we start with a value of 1 and decay it over time!
         if adapting_learning_rate:
@@ -241,5 +242,5 @@ if __name__ == "__main__":
     
     data = pd.read_csv('data/train_processed.csv')
     agent_standard_greedy = QAgent(data=data)
-    train(agent_standard_greedy, 20000, 0.1, 336, max_workers=8, multiprocessing=False)
+    train(agent_standard_greedy, 2000, 0.5, 336, 0.01, adapting_learning_rate=True, adaptive_epsilon=True, max_workers=8, multiprocessing=False)
     agent_standard_greedy.visualize_rewards()
