@@ -73,7 +73,7 @@ class QAgent():
     
     def visualize_rewards(self):
         plt.figure(figsize =(7.5,7.5))
-        plt.plot(100*(np.arange(len(self.average_rewards))+1), self.average_rewards)
+        plt.plot(20*(np.arange(len(self.average_rewards))+1), self.average_rewards)
         plt.title('Average reward over the past 100 simulations', fontsize = 10)
         plt.legend(['Q-learning performance','Benchmark'])
         plt.xlabel('Number of simulations', fontsize = 10)
@@ -136,11 +136,13 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         if episode == episodes:
             done = True
 
-        if done:
-            reward = info["theoretical_profit"]
-        else:
+        ## REWARD CALCULATION FOR TERMINAL STATE
+        # if done:
+        #     reward = info["total_value"]
+        # else:
             # apply different reward, if desired
-            reward = reward
+
+        reward = reward
         
         #Now discretize the next_state
         next_state = agent.discretize_state(next_state)
@@ -241,6 +243,6 @@ def train(agent, simulations, learning_rate, episodes = 1000, epsilon = 0.05, ep
 if __name__ == "__main__":
     
     data = pd.read_csv('data/train_processed.csv')
-    agent_standard_greedy = QAgent(data=data)
-    train(agent_standard_greedy, 2000, 0.5, 336, 0.01, adapting_learning_rate=True, adaptive_epsilon=True, max_workers=8, multiprocessing=False)
+    agent_standard_greedy = QAgent(data=data, discount_rate=1.01)
+    train(agent_standard_greedy, 1000, 0.1, 7000, 0.05, adapting_learning_rate=False, adaptive_epsilon=False, max_workers=8, multiprocessing=False)
     agent_standard_greedy.visualize_rewards()
