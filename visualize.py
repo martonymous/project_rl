@@ -2,6 +2,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
+
+def merge_dfs(val: pd.DataFrame, choices: pd.DataFrame):
+    return pd.concat([val.reset_index(drop=True), choices.reset_index(drop=True)], axis=1)
+
 def visualize_validation(filename: str, start: int, end: int):
     val = pd.read_csv(filename)
 
