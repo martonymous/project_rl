@@ -125,6 +125,23 @@ class DamWorldEnv(gym.Env):
         info = self._get_info()
         return observation, info
 
+    def get_obs(self, index):
+        self.index = index
+        self.hour = self.data["hour"].iloc[self.index]
+        self.day = self.data["day"].iloc[self.index]
+        self.week = self.data["week"].iloc[self.index]
+        self.month = self.data["month"].iloc[self.index]
+
+        self.water_level = 50000  # half of maximum water level
+        self.starting_cash = 0  # (arbitrary) amount of cash
+        self.cash = self.starting_cash
+        self.electricity_cost = self.data["prices"].iloc[self.index]
+        self.value = self.starting_cash + (self.electricity_cost * self.water_level)
+        
+        observation = self._get_obs()
+        info = self._get_info()
+        return observation, info
+
 if __name__ == "__main__":
 
     data = pd.read_csv('data/train_processed.csv')

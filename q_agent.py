@@ -4,7 +4,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import gymnasium as gym
 from multiprocessing import Pool, cpu_count
-
+import os.path
+from os import path
+import pickle 
+import csv
 
 class QAgent():
     
@@ -238,9 +241,70 @@ def train(agent, simulations, learning_rate, episodes = 1000, epsilon = 0.05, ep
 
         print('The simulation is done!')
         
+def evaluate(agent, val_data):
+    action_sequence = []
+    total_rewards=0
+    agent.env = DamWorldEnv(observation_data=val_data)
+    for i in range(len(val_data)):
+        obs, info = agent.env.get_obs(i)
+        print(obs)
+        obs = agent.discretize_state(obs)
+        a = agent.Qtable[
+            obs["electricity_cost"], 
+            obs["water_level"], 
+            obs["time_hour"], 
+            obs["time_day"],
+            obs["time_month"], :, :
+            ]
+        action = np.unravel_index(np.argmax(a), a.shape)
+        action_sequence.append(action[0])    
+        next_state, reward, terminated, truncated, info = agent.env.step(action) # step returns 5 outputs
+        total_rewards+=reward
+    print('The evaluation is done!')
+    return action_sequence, total_rewards
+
+
+'''def evaluate(agent, val_data):
+    action_sequence = []
+    agent.env = DamWorldEnv(observation_data=val_data)
+    for i in range(len(val_data)):
+        obs, info = agent.env.get_obs(i)
+        print(obs)
+        obs = agent.discretize_state(obs)
+        a = agent.Qtable[
+            obs["electricity_cost"], 
+            obs["water_level"], 
+            obs["time_hour"], 
+            obs["time_day"],
+            obs["time_month"], :, :
+            ]
+        action = np.unravel_index(np.argmax(a), a.shape)   
+    action_sequence.append(action[0])    
+    print('The evaluation is done!')
+    return action_sequence'''
+
 if __name__ == "__main__":
     
-    data = pd.read_csv('data/train_processed.csv')
-    agent_standard_greedy = QAgent(data=data)
-    train(agent_standard_greedy, 2000, 0.5, 336, 0.01, adapting_learning_rate=True, adaptive_epsilon=True, max_workers=8, multiprocessing=False)
-    agent_standard_greedy.visualize_rewards()
+    if not path.exists("data/trained_QAgent"):
+        data = pd.read_csv('data/train_processed.csv')
+        agent_standard_greedy = QAgent(data=data)
+        train(agent_standard_greedy, 2000, 0.5, 336, 0.01, adapting_learning_rate=True, adaptive_epsilon=True, max_workers=8, multiprocessing=False)
+        agent_standard_greedy.visualize_rewards()
+        #save trained agent
+        f=open('data/trained_QAgent','wb')
+        pickle.dump(agent_standard_greedy, f)
+        f.close
+
+    else:
+        val_data = pd.read_csv('data/val.csv')
+        f=open('data/trained_QAgent','rb')
+        trained_agent = pickle.load(f)
+        #trained_agent.visualize_rewards()
+        trained_agent_action_seq=evaluate(trained_agent, val_data)
+        #print(trained_agent_action_seq)
+        df = pd.DataFrame({'actions':trained_agent_action_seq[0]})
+        df.to_csv('data/trainedAgent_action_seq.csv')
+
+
+    
+    
