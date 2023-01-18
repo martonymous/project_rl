@@ -19,9 +19,11 @@ class DamWorldEnv(gym.Env):
         self.flow_multiplier = {
             0: 1,
             1: 2,
-            2: 4
+            2: 4,
+            3: 9,
+            4: 18
         }
-        self.flow_rate = 5000
+        self.flow_rate = 1000
 
         self.sell_efficiency = 0.9
         self.buy_efficiency = 0.8
@@ -32,6 +34,9 @@ class DamWorldEnv(gym.Env):
         self.time_month_dim = 12
         self.water_level_dim = 21
         self.water_capacity = self.flow_rate * self.water_level_dim
+        # for converting water level (m³) to MWh
+        #  pot. energy of 1 m³ = mass *    g *  h * (Joule to MWH factor)
+        self.conversion_factor = 1000 * 9.81 * 30 * (2 + (7/9)) * (10 ** -10)
 
         self.action_space = spaces.MultiDiscrete([len(self.Actions), len(self.flow_multiplier)])
         self.observation_space = spaces.Dict(
@@ -66,14 +71,17 @@ class DamWorldEnv(gym.Env):
     
     def _get_info(self):
         return {
-            "profit": self.cash - self.starting_cash,
-            "unrealized_profit": self.water_level * self.electricity_cost * self.sell_efficiency,
-            "theoretical_profit": (self.cash - self.starting_cash) + (self.water_level * self.electricity_cost * self.sell_efficiency)
+            "profit": (self.cash - self.starting_cash),
+            "unrealized_profit": self.water_level * self.electricity_cost * self.sell_efficiency * self.conversion_factor,
+            "total_value": (self.cash - self.starting_cash) + (self.water_level * self.electricity_cost * self.sell_efficiency * self.conversion_factor)
         }
     
     def step(self, action, terminated=False):
         info = self._get_info()
-        previous_total_value = info["theoretical_profit"]
+
+        previous_total_value = info["total_value"]
+        previous_cash = self.cash
+
         # first check if simulation terminates, otherwise move index and perform action
         if (self.index+1) == self.data.shape[0] or (self.water_level == 0 and self.cash == 0):
             terminated = True
@@ -84,32 +92,40 @@ class DamWorldEnv(gym.Env):
             flow_mult = self.flow_multiplier[action[1]]
 
             # we can only sell if there is water in the dam
-            if action[0] == 0 and self.water_level != 0:
+            if (action[0] == 0) and (self.water_level != 0):
                 if self.water_level > (flow_mult * self.flow_rate):
-                    self.cash += self.electricity_cost * self.sell_efficiency * flow_mult * self.flow_rate
+                    self.cash += self.electricity_cost * self.sell_efficiency * flow_mult * self.flow_rate * self.conversion_factor
                     self.water_level -= flow_mult * self.flow_rate
                 else:
-                    self.cash += self.electricity_cost * self.sell_efficiency * self.water_level
+                    self.cash += self.electricity_cost * self.sell_efficiency * self.water_level * self.conversion_factor
                     self.water_level = 0
                     
             # we can only buy if we have cash and if dam is not full
-            elif action[0] == 1 and self.water_level < self.water_capacity and self.cash > (self.electricity_cost * self.sell_efficiency * (self.water_capacity - self.water_level)):
+            elif (action[0] == 1) and (self.water_level < self.water_capacity) and (self.cash > (self.electricity_cost * self.sell_efficiency * (self.water_capacity - self.water_level) * self.conversion_factor)):
                 if (self.water_capacity - self.water_level) > (flow_mult * self.flow_rate):
-                    self.cash -= self.electricity_cost * self.buy_efficiency * flow_mult * self.flow_rate
+                    self.cash -= self.electricity_cost * self.buy_efficiency * flow_mult * self.flow_rate * self.conversion_factor
                     self.water_level += flow_mult * self.flow_rate
                 else:
-                    self.cash -= self.electricity_cost * self.sell_efficiency * (self.water_capacity - self.water_level)
+                    self.cash -= self.electricity_cost * self.sell_efficiency * (self.water_capacity - self.water_level) * self.conversion_factor
                     self.water_level = self.water_capacity
                     
         observation = self._get_obs()
         info = self._get_info()
-        self.value = info["theoretical_profit"]
-        reward = info["theoretical_profit"] - previous_total_value
+        self.value = info["total_value"]
+        
+        if self.value > previous_total_value:
+            reward = 1
+        else:
+            reward = -1
 
         return observation, reward, terminated, False, info
 
-    def reset(self):
-        self.index = random.randint(0, len(self.data) - 50)
+    def reset(self, val=False):
+        if val:
+            self.index = 0
+        else:
+            self.index = random.randint(0, len(self.data) - 50)
+
         self.hour = self.data["hour"].iloc[self.index]
         self.day = self.data["day"].iloc[self.index]
         self.week = self.data["week"].iloc[self.index]
@@ -119,7 +135,7 @@ class DamWorldEnv(gym.Env):
         self.starting_cash = 0  # (arbitrary) amount of cash
         self.cash = self.starting_cash
         self.electricity_cost = self.data["prices"].iloc[self.index]
-        self.value = self.starting_cash + (self.electricity_cost * self.water_level)
+        self.value = self.starting_cash + (self.electricity_cost * self.water_level * self.conversion_factor)
         
         observation = self._get_obs()
         info = self._get_info()
