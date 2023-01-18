@@ -188,8 +188,8 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         #Initialize a new reward list, as otherwise the average values would reflect all rewards!
         agent.rewards = []
 
-def train(agent, simulations, learning_rate, episodes = 1000, epsilon = 0.5, epsilon_decay_start = 50000, epsilon_decay_end = 100000, adaptive_epsilon = False, 
-              adapting_learning_rate = False, multiprocessing=False, max_workers=None):
+def train(agent, simulations, learning_rate, episodes = 1000, epsilon = 0.5, epsilon_decay_start = 500000, epsilon_decay_end = 1000000, adaptive_epsilon = False, 
+              adapting_learning_rate = False, multiprocessing=False, max_workers=None, checkpoints=True, checkpoint_save_every = 20000):
         
         '''
         Params:
@@ -236,7 +236,10 @@ def train(agent, simulations, learning_rate, episodes = 1000, epsilon = 0.5, eps
         else:
             for i in range(simulations):
                 simulate(agent, i, 1000, 0.1)
-
+                if checkpoints:
+                    with open(f'q_agent_longer_training.pickle', 'wb') as f:
+                        pickle.dump(q_agent, f)
+                    
         print('The simulation is done!')
 
 def evaluate(agent, val_data):
@@ -275,10 +278,7 @@ if __name__ == "__main__":
     if not eval:
         data = pd.read_csv('data/train_processed.csv')
         q_agent = QAgent(data=data, discount_rate=0.99999)
-        train(q_agent, 100000, 0.1, 2400, 1, epsilon_decay_start=50000, epsilon_decay_end=100000, adapting_learning_rate=False, adaptive_epsilon=True, max_workers=8, multiprocessing=False)
-
-        with open('q_agent_long_training.pickle', 'wb') as f:
-            pickle.dump(q_agent, f)
+        train(q_agent, 500000, 0.1, 2400, 1, epsilon_decay_start=250000, epsilon_decay_end=500000, adapting_learning_rate=False, adaptive_epsilon=True, max_workers=8, multiprocessing=False)
 
     else:
         val_data = pd.read_csv('data/val.csv')
