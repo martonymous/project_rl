@@ -31,8 +31,9 @@ class QAgent():
         #0: sell water-storage for electricity
         #1: buy water-storage
         #2: hold on
-        self.action_space1 = self.env.action_space.nvec[0]
-        self.action_space2 = self.env.action_space.nvec[1]
+        self.action_space = self.env.action_space.n
+        # self.action_space1 = self.env.action_space.nvec[0]
+        # self.action_space2 = self.env.action_space.nvec[1]
     
         # Create bins for continuous observation features, i.e. price and water level
         self.bin_prices = np.linspace(0, self.env.data["prices"].max(), self.bin_size)
@@ -68,8 +69,7 @@ class QAgent():
             self.env.time_hour_dim, 
             self.env.time_day_dim,
             self.env.time_month_dim, 
-            self.action_space1, 
-            self.action_space2
+            self.action_space
         ))
     
     def visualize_rewards(self):
@@ -91,6 +91,10 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
     # If adaptive epsilon rate
     if agent.adaptive_epsilon:
         agent.epsilon = np.interp(i, [agent.epsilon_decay_start, agent.epsilon_decay_end], [agent.epsilon_start, agent.epsilon_end])
+
+    # If adaptive epsilon rate
+    if agent.adaptive_discount:
+        agent.discount_rate = np.interp(i, [agent.discount_start, agent.discount_end], [agent.discount_start_value, agent.discount_end_value])
 
     # Initialize the state
     state = agent.env.reset()[0]   # reset returns a dict, need to take the 0th entry.
@@ -122,9 +126,9 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
                 state["water_level"], 
                 state["time_hour"], 
                 state["time_day"],
-                state["time_month"], :, :
+                state["time_month"], :
                 ]
-            action = np.unravel_index(np.argmax(a), a.shape)
+            action = np.argmax(a)
             
         # Now sample the next_state, reward, done and info from the environment        
         next_state, reward, terminated, truncated, info = agent.env.step(action) # step returns 5 outputs
@@ -162,15 +166,14 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
             state["time_hour"], 
             state["time_day"],
             state["time_month"],
-            action[0],
-            action[1]
+            action
         ])
         
         # Update the Q-value
         agent.Qtable[
-            state["electricity_cost"], state["water_level"], state["time_hour"], state["time_day"], state["time_month"], action[0], action[1]
+            state["electricity_cost"], state["water_level"], state["time_hour"], state["time_day"], state["time_month"], action
         ] = agent.Qtable[
-            state["electricity_cost"], state["water_level"], state["time_hour"], state["time_day"], state["time_month"], action[0], action[1]
+            state["electricity_cost"], state["water_level"], state["time_hour"], state["time_day"], state["time_month"], action
         ] + delta
         
         # Update the reward and the hyperparameters
@@ -188,8 +191,8 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         #Initialize a new reward list, as otherwise the average values would reflect all rewards!
         agent.rewards = []
 
-def train(agent, simulations, learning_rate, episodes = 1000, epsilon = 0.5, epsilon_decay_start = 500000, epsilon_decay_end = 1000000, adaptive_epsilon = False, 
-              adapting_learning_rate = False, multiprocessing=False, max_workers=None, checkpoints=True, checkpoint_save_every = 20000):
+def train(agent, simulations, learning_rate, episodes = 1000, epsilon = 0.5, discount_start=0, discount_end=100000, epsilon_decay_start = 500000, epsilon_decay_end = 1000000, adaptive_discount=True, adaptive_epsilon = False, 
+              adapting_learning_rate = False, multiprocessing=False, max_workers=None, checkpoints=True, checkpoint_save_every = 2000):
         
         '''
         Params:
@@ -210,17 +213,23 @@ def train(agent, simulations, learning_rate, episodes = 1000, epsilon = 0.5, eps
         #Call the Q table function to create an initialized Q table
         agent.create_Q_table()
         
-        #Set epsilon rate, epsilon decay and learning rate
+        #Set epsilon rate, epsilon decay, learning rate, and discount rate
         agent.epsilon = epsilon
         agent.epsilon_decay_start = epsilon_decay_start
         agent.epsilon_decay_end = epsilon_decay_end
+        agent.discount_start = discount_start
+        agent.discount_end = discount_end
         agent.learning_rate = learning_rate
+
         agent.adapting_learning_rate = adapting_learning_rate
         agent.adaptive_epsilon = adaptive_epsilon
+        agent.adaptive_discount = adaptive_discount
         
         #Set start epsilon, so here we want a starting exploration rate of 1
         agent.epsilon_start = 1
         agent.epsilon_end = 0.1
+        agent.discount_start_value = 0.85
+        agent.discount_end_value = 0.99
         
         #If we choose adaptive learning rate, we start with a value of 1 and decay it over time!
         if adapting_learning_rate:
@@ -236,8 +245,8 @@ def train(agent, simulations, learning_rate, episodes = 1000, epsilon = 0.5, eps
         else:
             for i in range(simulations):
                 simulate(agent, i, 1000, 0.1)
-                if checkpoints:
-                    with open(f'q_agent_longer_training.pickle', 'wb') as f:
+                if checkpoints and (i % checkpoint_save_every == 0):
+                    with open(f'q_agent_new.pickle', 'wb') as f:
                         pickle.dump(q_agent, f)
                     
         print('The simulation is done!')
@@ -277,16 +286,16 @@ if __name__ == "__main__":
 
     if not eval:
         data = pd.read_csv('data/train_processed.csv')
-        q_agent = QAgent(data=data, discount_rate=0.99999)
-        train(q_agent, 500000, 0.1, 2400, 1, epsilon_decay_start=250000, epsilon_decay_end=500000, adapting_learning_rate=False, adaptive_epsilon=True, max_workers=8, multiprocessing=False)
+        q_agent = QAgent(data=data, discount_rate=0.99)
+        train(q_agent, 500001, 0.1, 2400, 1, discount_start=0, discount_end=100000, epsilon_decay_start=250000, epsilon_decay_end=500000, adaptive_discount=True, adapting_learning_rate=True, adaptive_epsilon=True, max_workers=8, multiprocessing=False)
 
     else:
         val_data = pd.read_csv('data/val.csv')
 
-        with open('q_agent.pickle','rb') as f:
+        with open('q_agent_longer_training.pickle','rb') as f:
             trained_agent = pickle.load(f)
 
         actions, cash, rewards, water_level = evaluate(trained_agent, val_data)
 
         df = pd.DataFrame({"prices": val_data["prices"], 'actions': actions, "cash": cash, "water_level": water_level, "rewards": rewards})
-        df.to_csv('data/eval.csv')
+        df.to_csv('data/eval_long.csv')
