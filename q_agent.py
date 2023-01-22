@@ -1,4 +1,5 @@
 from environment import DamWorldEnv
+from utils import *
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,7 +10,7 @@ import pickle, os
 
 class QAgent():
     
-    def __init__(self, data: pd.DataFrame, bin_size = 101, discount_rate = 0.95):
+    def __init__(self, data: pd.DataFrame, bin_size = 101, discount_rate = 0.999):
         
         '''
         Params:
@@ -32,8 +33,6 @@ class QAgent():
         #1: buy water-storage
         #2: hold on
         self.action_space = self.env.action_space.n
-        # self.action_space1 = self.env.action_space.nvec[0]
-        # self.action_space2 = self.env.action_space.nvec[1]
     
         # Create bins for continuous observation features, i.e. price and water level
         self.bin_prices = np.linspace(0, self.env.data["prices"].max(), self.bin_size)
@@ -60,7 +59,7 @@ class QAgent():
 
         return state
     
-    def create_Q_table(self):
+    def create_Q_table(self, init_val):
         self.state_space = self.bin_size - 1
         #Initialize all values in the Q-table to zero
         self.Qtable = np.zeros((
@@ -71,6 +70,7 @@ class QAgent():
             self.env.time_month_dim, 
             self.action_space
         ))
+        self.Qtable = self.Qtable + init_val
     
     def visualize_rewards(self):
         plt.figure(figsize =(7.5,7.5))
@@ -191,7 +191,7 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         #Initialize a new reward list, as otherwise the average values would reflect all rewards!
         agent.rewards = []
 
-def train(agent, simulations, learning_rate, episodes = 1000, epsilon = 0.5, discount_start=0, discount_end=100000, epsilon_decay_start = 500000, epsilon_decay_end = 1000000, adaptive_discount=True, adaptive_epsilon = False, 
+def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsilon=0.5, discount_start=0, discount_end=100000, epsilon_decay_start = 500000, epsilon_decay_end = 1000000, adaptive_discount=True, adaptive_epsilon = False, 
               adapting_learning_rate = False, multiprocessing=False, max_workers=None, checkpoints=True, checkpoint_save_every = 2000):
         
         '''
@@ -211,19 +211,20 @@ def train(agent, simulations, learning_rate, episodes = 1000, epsilon = 0.5, dis
         agent.average_rewards = []
         
         #Call the Q table function to create an initialized Q table
-        agent.create_Q_table()
+        agent.create_Q_table(init_val=10000)
         
         #Set epsilon rate, epsilon decay, learning rate, and discount rate
+        agent.adaptive_discount = adaptive_discount
+        agent.adapting_learning_rate = adapting_learning_rate
+        agent.adaptive_epsilon = adaptive_epsilon
+        agent.learning_rate = learning_rate
+
         agent.epsilon = epsilon
         agent.epsilon_decay_start = epsilon_decay_start
         agent.epsilon_decay_end = epsilon_decay_end
+
         agent.discount_start = discount_start
         agent.discount_end = discount_end
-        agent.learning_rate = learning_rate
-
-        agent.adapting_learning_rate = adapting_learning_rate
-        agent.adaptive_epsilon = adaptive_epsilon
-        agent.adaptive_discount = adaptive_discount
         
         #Set start epsilon, so here we want a starting exploration rate of 1
         agent.epsilon_start = 1
@@ -246,9 +247,10 @@ def train(agent, simulations, learning_rate, episodes = 1000, epsilon = 0.5, dis
             for i in range(simulations):
                 simulate(agent, i, 1000, 0.1)
                 if checkpoints and (i % checkpoint_save_every == 0):
-                    with open(f'q_agent_new.pickle', 'wb') as f:
-                        pickle.dump(q_agent, f)
-                    
+                    save_model(q_agent, i, unique_id)
+            if not checkpoints:
+                save_model(q_agent, i, unique_id)
+
         print('The simulation is done!')
 
 def evaluate(agent, val_data):
@@ -267,10 +269,10 @@ def evaluate(agent, val_data):
             obs["water_level"], 
             obs["time_hour"], 
             obs["time_day"],
-            obs["time_month"], :, :
+            obs["time_month"], :
             ]
-        action = np.unravel_index(np.argmax(a), a.shape)
-        action_sequence.append(action[0])
+        action = np.argmax(a)
+        action_sequence.append(action)
 
         next_state, reward, terminated, truncated, info = agent.env.step(action) # step returns 5 outputs
         rewards += reward
@@ -285,14 +287,28 @@ if __name__ == "__main__":
     eval = False
 
     if not eval:
+
+        
+        Seed = 42
+        UNIQUE_RUN_ID = str(uuid.uuid4())
+        make_directory_for_run(UNIQUE_RUN_ID)
+
         data = pd.read_csv('data/train_processed.csv')
         q_agent = QAgent(data=data, discount_rate=0.99)
-        train(q_agent, 500001, 0.1, 2400, 1, discount_start=0, discount_end=100000, epsilon_decay_start=250000, epsilon_decay_end=500000, adaptive_discount=True, adapting_learning_rate=True, adaptive_epsilon=True, max_workers=8, multiprocessing=False)
+        train(q_agent, UNIQUE_RUN_ID, simulations=50001, learning_rate=0.5, episodes=1344, epsilon=0.9, discount_start=0, discount_end=100000, epsilon_decay_start=250000, epsilon_decay_end=500000, adaptive_discount=False, adapting_learning_rate=True, adaptive_epsilon=False, max_workers=8, multiprocessing=False, checkpoint_save_every=1000)
 
     else:
+
+        list_of_files = glob.glob('./runs/*') # * means all if need specific format then *.csv
+        latest_folder = max(list_of_files, key=os.path.getctime)
+
+        list_of_files = glob.glob(f'{latest_folder}/*')
+        latest_file = max(list_of_files, key=os.path.getctime)
+        print(latest_file)
+
         val_data = pd.read_csv('data/val.csv')
 
-        with open('q_agent_longer_training.pickle','rb') as f:
+        with open(latest_file,'rb') as f:
             trained_agent = pickle.load(f)
 
         actions, cash, rewards, water_level = evaluate(trained_agent, val_data)

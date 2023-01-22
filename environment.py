@@ -12,15 +12,15 @@ class DamWorldEnv(gym.Env):
     def __init__(self, observation_data: pd.DataFrame):
         self.data = observation_data
         self.Actions = {
-            "sell_1": -18000,
-            "sell_2": -10000,
-            "sell_3": -4000,
-            "sell_4": -2000,
-            "hold": 0,
-            "buy_4": 2000,
-            "buy_3": 4000,
-            "buy_2": 10000,
-            "buy_1": 18000,
+            0: -18000,
+            1: -10000,
+            2: -4000,
+            3: -2000,
+            4: 0,
+            5: 2000,
+            6: 4000,
+            7: 10000,
+            8: 18000,
         }
 
         # self.flow_multiplier = {
@@ -85,18 +85,17 @@ class DamWorldEnv(gym.Env):
     
     def step(self, action, terminated=False):
         info = self._get_info()
+        action = self.Actions[action]
 
         previous_total_value = info["total_value"]
         previous_cash = self.cash
 
         # first check if simulation terminates, otherwise move index and perform action
-        if (self.index+1) == self.data.shape[0] or (self.water_level == 0 and self.cash == 0):
+        if (self.index+1) == self.data.shape[0]:
             terminated = True
         else:
             # otherwise continue
             self.index += 1
-
-            # flow_mult = self.flow_multiplier[action[1]]
 
             # we can only sell if there is water in the dam
             if (action < 0) and (self.water_level != 0):
@@ -108,24 +107,26 @@ class DamWorldEnv(gym.Env):
                     self.water_level = 0
                     
             # we can only buy if we have cash and if dam is not full
-            elif (action > 0) and (self.water_level < self.water_capacity) and (self.cash > (self.electricity_cost * self.sell_efficiency * (self.water_capacity - self.water_level) * self.conversion_factor)):
+            elif (action > 0) and (self.water_level < self.water_capacity):
                 if (self.water_capacity - self.water_level) > abs(action):
-                    self.cash -= self.electricity_cost * self.buy_efficiency * abs(action) * self.conversion_factor
+                    self.cash -= (self.electricity_cost * abs(action) * self.conversion_factor) / self.buy_efficiency 
                     self.water_level += action
                 else:
-                    self.cash -= self.electricity_cost * self.sell_efficiency * (self.water_capacity - self.water_level) * self.conversion_factor
+                    self.cash -= (self.electricity_cost * (self.water_capacity - self.water_level) * self.conversion_factor) / self.buy_efficiency 
                     self.water_level = self.water_capacity
                     
         observation = self._get_obs()
         info = self._get_info()
         self.value = info["total_value"]
         
-        reward = self.value - previous_total_value
+        # reward = self.value - previous_total_value
+        # reward = self.cash - previous_cash
 
-        # if self.value > previous_total_value:
-        #     reward = 1
-        # else:
-        #     reward = -1
+        # ALTERNATIVE REWARD CALCULATION
+        if self.cash > previous_cash:
+            reward = -1
+        else:
+            reward = 1
 
         return observation, reward, terminated, False, info
 
