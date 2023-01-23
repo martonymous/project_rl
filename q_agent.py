@@ -86,7 +86,7 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
     #     print(f'Please wait, the algorithm is learning! The current simulation is {i}')
 
     if agent.adapting_learning_rate:
-        learning_rate = learning_rate/np.sqrt(i+1)
+        learning_rate = learning_rate/np.sqrt((i/25000)+1)
 
     # If adaptive epsilon rate
     if agent.adaptive_epsilon:
@@ -211,7 +211,7 @@ def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsil
         agent.average_rewards = []
         
         #Call the Q table function to create an initialized Q table
-        agent.create_Q_table(init_val=10000)
+        agent.create_Q_table(init_val=-100)
         
         #Set epsilon rate, epsilon decay, learning rate, and discount rate
         agent.adaptive_discount = adaptive_discount
@@ -228,9 +228,9 @@ def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsil
         
         #Set start epsilon, so here we want a starting exploration rate of 1
         agent.epsilon_start = 1
-        agent.epsilon_end = 0.1
-        agent.discount_start_value = 0.85
-        agent.discount_end_value = 0.99
+        agent.epsilon_end = 0.5
+        agent.discount_start_value = 0.8
+        agent.discount_end_value = 0.999
         
         #If we choose adaptive learning rate, we start with a value of 1 and decay it over time!
         if adapting_learning_rate:
@@ -284,7 +284,7 @@ def evaluate(agent, val_data):
     return action_sequence, cash, all_rewards, water_level
         
 if __name__ == "__main__":
-    eval = False
+    eval = True
 
     if not eval:
 
@@ -295,7 +295,7 @@ if __name__ == "__main__":
 
         data = pd.read_csv('data/train_processed.csv')
         q_agent = QAgent(data=data, discount_rate=0.99)
-        train(q_agent, UNIQUE_RUN_ID, simulations=50001, learning_rate=0.5, episodes=1344, epsilon=0.9, discount_start=0, discount_end=100000, epsilon_decay_start=250000, epsilon_decay_end=500000, adaptive_discount=False, adapting_learning_rate=True, adaptive_epsilon=False, max_workers=8, multiprocessing=False, checkpoint_save_every=1000)
+        train(q_agent, UNIQUE_RUN_ID, simulations=100001, learning_rate=0.5, episodes=5000, epsilon=0.9, discount_start=0, discount_end=100000, epsilon_decay_start=50000, epsilon_decay_end=100000, adaptive_discount=True, adapting_learning_rate=True, adaptive_epsilon=True, max_workers=8, multiprocessing=False, checkpoint_save_every=2000)
 
     else:
 

@@ -119,14 +119,16 @@ class DamWorldEnv(gym.Env):
         info = self._get_info()
         self.value = info["total_value"]
         
-        # reward = self.value - previous_total_value
+        value_weight = 1
+        cash_weight = 0
+        reward = value_weight * (self.value - previous_total_value) + cash_weight * (self.cash - previous_cash)
         # reward = self.cash - previous_cash
 
         # ALTERNATIVE REWARD CALCULATION
-        if self.cash > previous_cash:
-            reward = -1
-        else:
-            reward = 1
+        # if self.cash > previous_cash:
+        #     reward = 1
+        # else:
+        #     reward = -1
 
         return observation, reward, terminated, False, info
 
