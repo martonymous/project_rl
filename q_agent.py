@@ -96,6 +96,9 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
     if agent.adaptive_discount:
         agent.discount_rate = np.interp(i, [agent.discount_start, agent.discount_end], [agent.discount_start_value, agent.discount_end_value])
 
+    if agent.pre_training and i < agent.pre_training:
+        pre_training = True
+
     # Initialize the state
     state = agent.env.reset()[0]   # reset returns a dict, need to take the 0th entry.
 
@@ -121,13 +124,20 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
 
         # Pick a greedy action
         else:
-            a = agent.Qtable[
-                state["time_hour"], 
-                state["time_weekend"],
-                state["time_month"],
-                state["electricity_cost"], 
-                state["water_level"],  :
-                ]
+            if pre_training:
+                a = agent.Qtable[
+                    state["time_hour"], 
+                    state["time_weekend"],
+                    state["time_month"], :, :, :
+                    ]
+            else:
+                a = agent.Qtable[
+                    state["time_hour"], 
+                    state["time_weekend"],
+                    state["time_month"],
+                    state["electricity_cost"], 
+                    state["water_level"], :
+                    ]
             action = np.argmax(a)
             
         # Now sample the next_state, reward, done and info from the environment        
@@ -148,16 +158,25 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         # Now discretize the next_state
         next_state = agent.discretize_state(next_state)
         
-        # Target value 
-        Q_target = (
-            reward + agent.discount_rate*np.max(agent.Qtable[
-                state["time_hour"], 
-                state["time_weekend"],
-                state["time_month"],
-                state["electricity_cost"], 
-                state["water_level"],
-            ])
-        )
+        # Target value
+        if pre_training:
+            Q_target = (
+                reward + agent.discount_rate*np.max(agent.Qtable[
+                    state["time_hour"], 
+                    state["time_weekend"],
+                    state["time_month"], :, :
+                ])
+            )
+        else:
+            Q_target = (
+                reward + agent.discount_rate*np.max(agent.Qtable[
+                    state["time_hour"], 
+                    state["time_weekend"],
+                    state["time_month"],
+                    state["electricity_cost"], 
+                    state["water_level"],
+                ])
+            )
         
         # Calculate the Temporal difference error (delta)
         delta = learning_rate * (Q_target - agent.Qtable[
@@ -170,11 +189,18 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         ])
         
         # Update the Q-value
-        agent.Qtable[
-            state["time_hour"], state["time_weekend"], state["time_month"], state["electricity_cost"], state["water_level"], action
-        ] = agent.Qtable[
-            state["time_hour"], state["time_weekend"], state["time_month"], state["electricity_cost"], state["water_level"], action
-        ] + delta
+        if pre_training:
+            agent.Qtable[
+                state["time_hour"], state["time_weekend"], state["time_month"], :, :, action
+            ] = agent.Qtable[
+                state["time_hour"], state["time_weekend"], state["time_month"], :, :, action
+            ] + delta
+        else:
+            agent.Qtable[
+                state["time_hour"], state["time_weekend"], state["time_month"], state["electricity_cost"], state["water_level"], action
+            ] = agent.Qtable[
+                state["time_hour"], state["time_weekend"], state["time_month"], state["electricity_cost"], state["water_level"], action
+            ] + delta
         
         # Update the reward and the hyperparameters
         total_rewards += reward
@@ -192,7 +218,7 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         agent.rewards = []
 
 def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsilon=0.5, discount_start=0, discount_end=100000, epsilon_decay_start = 500000, epsilon_decay_end = 1000000, adaptive_discount=True, adaptive_epsilon = False, 
-              adapting_learning_rate = False, multiprocessing=False, max_workers=None, checkpoints=True, checkpoint_save_every = 2000):
+              adapting_learning_rate = False, pre_training=False, multiprocessing=False, max_workers=None, checkpoints=True, checkpoint_save_every = 2000):
         
         '''
         Params:
@@ -231,6 +257,8 @@ def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsil
         agent.epsilon_end = 0.5
         agent.discount_start_value = 0.8
         agent.discount_end_value = 0.999
+
+        agent.pre_training = pre_training
         
         #If we choose adaptive learning rate, we start with a value of 1 and decay it over time!
         if adapting_learning_rate:
@@ -295,7 +323,7 @@ if __name__ == "__main__":
 
         data = pd.read_csv('data/train_processed.csv')
         q_agent = QAgent(data=data, discount_rate=0.99)
-        train(q_agent, UNIQUE_RUN_ID, simulations=100001, learning_rate=0.5, episodes=5000, epsilon=0.9, discount_start=0, discount_end=100000, epsilon_decay_start=50000, epsilon_decay_end=100000, adaptive_discount=True, adapting_learning_rate=True, adaptive_epsilon=True, max_workers=8, multiprocessing=False, checkpoint_save_every=2000)
+        train(q_agent, UNIQUE_RUN_ID, simulations=100001, learning_rate=0.5, episodes=16800, epsilon=0.9, discount_start=0, discount_end=100000, epsilon_decay_start=50000, epsilon_decay_end=100000, adaptive_discount=True, adapting_learning_rate=True, adaptive_epsilon=True, pre_training=10000, max_workers=8, multiprocessing=False, checkpoint_save_every=2000)
 
     else:
 
