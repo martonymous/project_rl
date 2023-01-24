@@ -37,6 +37,7 @@ class DamWorldEnv(gym.Env):
 
         self.time_hour_dim = 24
         self.time_day_dim = 7
+        self.time_weekend_dim = 2
         self.time_week_dim = 53
         self.time_month_dim = 12
         self.water_level_dim = 21
@@ -51,6 +52,7 @@ class DamWorldEnv(gym.Env):
                 "time_hour": spaces.Discrete(self.time_hour_dim, 42, 0),
                 "time_day": spaces.Discrete(self.time_day_dim, 42, 0),
                 "time_week": spaces.Discrete(self.time_week_dim, 42, 0),
+                "time_weekend": spaces.Discrete(self.time_weekend_dim, 42, 0),
                 "time_month": spaces.Discrete(self.time_month_dim, 42, 0),
 
                 "water_level": spaces.Discrete(self.water_level_dim, 42, 0),
@@ -62,6 +64,7 @@ class DamWorldEnv(gym.Env):
         self.hour = self.data["hour"].iloc[self.index]
         self.day = self.data["day"].iloc[self.index]
         self.week = self.data["week"].iloc[self.index]
+        self.weekend = self.data["weekend"].iloc[self.index]
         self.month = self.data["month"].iloc[self.index]
         self.electricity_cost = self.data["prices"].iloc[self.index]
 
@@ -69,6 +72,7 @@ class DamWorldEnv(gym.Env):
             "time_hour": self.hour, 
             "time_day": self.day,
             "time_week": self.week,
+            "time_weekend": self.weekend,
             "time_month": self.month,
             "water_level": self.water_level,
             "electricity_cost": self.electricity_cost,
@@ -141,6 +145,7 @@ class DamWorldEnv(gym.Env):
         self.hour = self.data["hour"].iloc[self.index]
         self.day = self.data["day"].iloc[self.index]
         self.week = self.data["week"].iloc[self.index]
+        self.weekend = self.data["weekend"].iloc[self.index]
         self.month = self.data["month"].iloc[self.index]
 
         self.water_level = 50000  # half of maximum water level

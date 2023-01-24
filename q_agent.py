@@ -61,13 +61,13 @@ class QAgent():
     
     def create_Q_table(self, init_val):
         self.state_space = self.bin_size - 1
-        #Initialize all values in the Q-table to zero
+        #Initialize all values in the Q-table 
         self.Qtable = np.zeros((
+            self.env.time_hour_dim, 
+            self.env.time_weekend_dim,
+            self.env.time_month_dim, 
             self.bin_size, 
             self.env.water_level_dim, 
-            self.env.time_hour_dim, 
-            self.env.time_day_dim,
-            self.env.time_month_dim, 
             self.action_space
         ))
         self.Qtable = self.Qtable + init_val
@@ -122,11 +122,11 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         # Pick a greedy action
         else:
             a = agent.Qtable[
-                state["electricity_cost"], 
-                state["water_level"], 
                 state["time_hour"], 
-                state["time_day"],
-                state["time_month"], :
+                state["time_weekend"],
+                state["time_month"],
+                state["electricity_cost"], 
+                state["water_level"],  :
                 ]
             action = np.argmax(a)
             
@@ -151,29 +151,29 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         # Target value 
         Q_target = (
             reward + agent.discount_rate*np.max(agent.Qtable[
-                state["electricity_cost"], 
-                state["water_level"], 
                 state["time_hour"], 
-                state["time_day"],
-                state["time_month"]
+                state["time_weekend"],
+                state["time_month"],
+                state["electricity_cost"], 
+                state["water_level"],
             ])
         )
         
         # Calculate the Temporal difference error (delta)
         delta = learning_rate * (Q_target - agent.Qtable[
+            state["time_hour"], 
+            state["time_weekend"],
+            state["time_month"],
             state["electricity_cost"], 
             state["water_level"], 
-            state["time_hour"], 
-            state["time_day"],
-            state["time_month"],
             action
         ])
         
         # Update the Q-value
         agent.Qtable[
-            state["electricity_cost"], state["water_level"], state["time_hour"], state["time_day"], state["time_month"], action
+            state["time_hour"], state["time_weekend"], state["time_month"], state["electricity_cost"], state["water_level"], action
         ] = agent.Qtable[
-            state["electricity_cost"], state["water_level"], state["time_hour"], state["time_day"], state["time_month"], action
+            state["time_hour"], state["time_weekend"], state["time_month"], state["electricity_cost"], state["water_level"], action
         ] + delta
         
         # Update the reward and the hyperparameters
@@ -265,11 +265,11 @@ def evaluate(agent, val_data):
         obs = agent.discretize_state(obs)
         
         a = agent.Qtable[
-            obs["electricity_cost"], 
-            obs["water_level"], 
             obs["time_hour"], 
-            obs["time_day"],
-            obs["time_month"], :
+            obs["time_weekend"],
+            obs["time_month"],
+            obs["electricity_cost"], 
+            obs["water_level"],  :
             ]
         action = np.argmax(a)
         action_sequence.append(action)
