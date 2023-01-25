@@ -9,9 +9,9 @@ def make_directory_for_run(unique_run_id):
     os.mkdir(f'./runs/{unique_run_id}')
 
     
-def save_model(model, epoch, unique_run_id):
+def save_model(model, phase, unique_run_id):
     """ Save models at specific point in time. """
-    with open(f'./runs/{unique_run_id}/agent_epoch-{epoch}.pickle', 'wb') as f:
+    with open(f'./runs/{unique_run_id}/agent_phase-{phase}.pickle', 'wb') as f:
         pickle.dump(model, f)
 
 
