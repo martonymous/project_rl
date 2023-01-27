@@ -13,24 +13,11 @@ class DamWorldEnv(gym.Env):
         self.data = observation_data
         self.Actions = {
             0: -18000,
-            1: -10000,
-            2: -4000,
-            3: -2000,
-            4: 0,
-            5: 2000,
-            6: 4000,
-            7: 10000,
-            8: 18000,
+            1: -9000,
+            2: 0,
+            3: 9000,
+            4: 18000,
         }
-
-        # self.flow_multiplier = {
-        #     0: 1,
-        #     1: 2,
-        #     2: 4,
-        #     3: 9,
-        #     4: 18
-        # }
-        # self.flow_rate = 1000
 
         self.sell_efficiency = 0.9
         self.buy_efficiency = 0.8
@@ -40,7 +27,7 @@ class DamWorldEnv(gym.Env):
         self.time_weekend_dim = 2
         self.time_week_dim = 53
         self.time_month_dim = 12
-        self.water_level_dim = 21
+        self.water_level_dim = 6
         self.water_capacity = 100000
         # for converting water level (m³) to MWh
         #  pot. energy of 1 m³ = mass *    g *  h * (Joule to MWH factor)

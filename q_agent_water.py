@@ -63,11 +63,7 @@ class QAgent():
     def create_Q_table(self, init_val):
         #Initialize all values in the Q-table 
         self.Qtable = np.zeros((
-            self.env.time_hour_dim, 
-            self.bin_size, 
-            self.env.time_month_dim, 
-            self.env.water_level_dim, 
-            self.env.time_weekend_dim,
+            self.env.water_level_dim,
             self.action_space
         ))
         self.Qtable = self.Qtable + init_val
@@ -126,7 +122,7 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
 
         # Pick a greedy action
         else:
-            a = agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"], state["water_level"], state["time_weekend"], :]
+            a = agent.Qtable[state["water_level"], :]
             action = np.argmax(a)
             
         # Now sample the next_state, reward, done and info from the environment        
@@ -149,23 +145,15 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         
         # Target value
         
-        a = agent.Qtable[next_state["time_hour"], next_state["electricity_cost"], next_state["time_month"], next_state["water_level"], next_state["time_weekend"]]
+        a = agent.Qtable[next_state["water_level"]]
         Q_target = (reward + agent.discount_rate*np.max(a))
         
         # Calculate the Temporal difference error (delta)
-        delta = learning_rate * (Q_target - agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"], state["water_level"], state["time_weekend"], action])
+        delta = learning_rate * (Q_target - agent.Qtable[state["water_level"], action])
         
         # Update the Q-value
         if phase_nr == 0:
-            agent.Qtable[state["time_hour"], :, :, :, :, action] = agent.Qtable[state["time_hour"], :, :, :, :, action] + delta
-        elif phase_nr == 1:
-            agent.Qtable[state["time_hour"], state["electricity_cost"], :, :, :, action] = agent.Qtable[state["time_hour"], state["electricity_cost"], :, :, :, action] + delta
-        elif phase_nr == 2:
-            agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"],  :, :, action] = agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"], :, :, action] + delta
-        elif phase_nr == 3:
-            agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"], state["water_level"], :, action] = agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"], state["water_level"], :, action] + delta
-        else:
-            agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"], state["water_level"], state["time_weekend"], action] = agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"], state["water_level"], state["time_weekend"], action] + delta
+            agent.Qtable[state["water_level"], :, action] = agent.Qtable[state["water_level"], action] + delta
 
         # Update the reward and the hyperparameters
         total_rewards += reward
@@ -219,7 +207,7 @@ def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsil
         
         #Set start epsilon, so here we want a starting exploration rate of 1
         agent.epsilon_start = 1
-        agent.epsilon_end = 0.6
+        agent.epsilon_end = 0.5
         agent.discount_start_value = 0.95
         agent.discount_end_value = 0.999
 
@@ -239,11 +227,8 @@ def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsil
         else:
             for i in range(simulations):
                 simulate(agent, i, 1000, 0.1)
-                if checkpoints and (i % checkpoint_save_every == 0):
-                    if phase_bins:
-                        save_model(q_agent, np.digitize(i, phase_bins), unique_id)
-                    else:
-                        save_model(q_agent, 'FINAL', unique_id)
+                if checkpoints and (i % checkpoint_save_every == 0) and phase_bins:
+                    save_model(q_agent, np.digitize(i, phase_bins), unique_id)
             if not checkpoints:
                 save_model(q_agent, i, unique_id)
 
@@ -261,11 +246,7 @@ def evaluate(agent, val_data):
         state = agent.discretize_state(state)
         
         a = agent.Qtable[
-            state["time_hour"], 
-            state["electricity_cost"], 
-            state["time_month"], 
-            state["water_level"], 
-            state["time_weekend"], :
+            state["water_level"], :
         ]
         action = np.argmax(a)
         action_sequence.append(action)
@@ -285,19 +266,14 @@ if __name__ == "__main__":
     if not eval:
 
         Seed = 42
-        UNIQUE_RUN_ID = str(uuid.uuid4())
-        make_directory_for_run(UNIQUE_RUN_ID)
 
         data = pd.read_csv('data/train_processed.csv')
         q_agent = QAgent(data=data, discount_rate=0.95)
-        train(q_agent, UNIQUE_RUN_ID, simulations=100001, learning_rate=0.25, episodes=16800, epsilon=1.0, discount_start=0, discount_end=60000, epsilon_decay_start=60000, epsilon_decay_end=90000, adaptive_discount=False, adapting_learning_rate=False, adaptive_epsilon=False, phase_bins=None, max_workers=8, multiprocessing=False, checkpoint_save_every=10)
+        train(q_agent, 'q_agent_water', simulations=10001, learning_rate=0.25, episodes=16800, epsilon=1.0, discount_start=0, discount_end=1000, epsilon_decay_start=60000, epsilon_decay_end=90000, adaptive_discount=False, adapting_learning_rate=False, adaptive_epsilon=False, phase_bins=None, max_workers=8, multiprocessing=False, checkpoints=False)
 
     else:
 
-        list_of_files = glob.glob('./runs/*') # * means all if need specific format then *.csv
-        latest_folder = max(list_of_files, key=os.path.getctime)
-
-        list_of_files = glob.glob(f'{latest_folder}/*')
+        list_of_files = glob.glob(f'runs/q_agent_water/*')
         latest_file = max(list_of_files, key=os.path.getctime)
         print(latest_file)
 
@@ -309,4 +285,4 @@ if __name__ == "__main__":
         actions, cash, rewards, water_level = evaluate(trained_agent, val_data)
 
         df = pd.DataFrame({"prices": val_data["prices"], 'actions': actions, "cash": cash, "water_level": water_level, "rewards": rewards})
-        df.to_csv('data/eval_long.csv')
+        df.to_csv('runs/q_agent_water/eval.csv')
