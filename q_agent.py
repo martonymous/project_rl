@@ -295,7 +295,7 @@ if __name__ == "__main__":
 
         data = pd.read_csv('data/train_processed.csv')
         q_agent = QAgent(data=data, discount_rate=0.99)
-        train(q_agent, UNIQUE_RUN_ID, simulations=100001, learning_rate=0.5, episodes=5000, epsilon=0.9, discount_start=0, discount_end=100000, epsilon_decay_start=50000, epsilon_decay_end=100000, adaptive_discount=True, adapting_learning_rate=True, adaptive_epsilon=True, max_workers=8, multiprocessing=False, checkpoint_save_every=2000)
+        train(q_agent, UNIQUE_RUN_ID, simulations=1000, learning_rate=0.5, episodes=5000, epsilon=0.9, discount_start=0, discount_end=100000, epsilon_decay_start=50000, epsilon_decay_end=100000, adaptive_discount=True, adapting_learning_rate=True, adaptive_epsilon=True, max_workers=8, multiprocessing=False, checkpoint_save_every=2000)
 
     else:
 

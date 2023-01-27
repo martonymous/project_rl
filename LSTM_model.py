@@ -18,7 +18,7 @@ def normalize_z_score(df, column_name):
 # Divides the df, in lists of size "num_time_steps" with prices values, and saves it on X list
 # Y list has for each index X sublist, the correspondig  "num_time_steps+1"th price.
 # i.e. returns X - sequences of previous values, y - the correspodent future value.
-def prepare_data(df, num_time_steps, num_features):
+def prepare_data(df, num_time_steps=10, num_features=1):
     #Normalize Prices
     df = normalize_z_score(df,'prices')
     # Create empty lists to store X and y
@@ -38,7 +38,7 @@ def prepare_data(df, num_time_steps, num_features):
 #Fits the prices data
 #Show the results
 #Returns the trained model and the training data set predictions
-def LSTM_model (df, num_time_steps=10, units=50, epochs=20, batch_size=32, num_features=1):
+def LSTM_Train (df, num_time_steps=10, units=50, epochs=20, batch_size=32, num_features=1):
 
     X, y = prepare_data(df, num_time_steps=num_time_steps, num_features=num_features)
     
@@ -59,6 +59,20 @@ def LSTM_model (df, num_time_steps=10, units=50, epochs=20, batch_size=32, num_f
     #check train results
     results(y,y_pred)
     return y_pred, model
+
+def LSTM_Eval(LSTM, df_test, num_time_steps=10,  num_features=1):
+    #Test Trained Model on Val data 
+    X, y = prepare_data(df_test,num_time_steps=num_time_steps, num_features=num_features)
+    LSTM.compile(loss='mse', optimizer='adam', metrics=['mean_squared_error', 'mean_absolute_error', 'mean_absolute_percentage_error', 'cosine_proximity'])
+    
+    score = LSTM.evaluate(X, y , verbose=0)
+    for i in range(5):
+        print("%s: %.2f%%" % (LSTM.metrics_names[i], score[i]*100))
+
+    y_pred = LSTM.predict(X)
+    results(y,y_pred)
+    return y_pred, LSTM
+    
 
 # Plot the real values against the predictions
 def results(real_values, predictions):
@@ -82,25 +96,17 @@ if __name__ == "__main__":
 
     df = pd.read_csv('data/train_processed.csv')
     #Creating and Training the LSTM Model
-    y_pred, model = LSTM_model(df, num_time_steps=num_time_steps, units=units, epochs=epochs, batch_size=batch_size)
+    y_pred, model = LSTM_Train(df, num_time_steps=num_time_steps, units=units, epochs=epochs, batch_size=batch_size)
     
     #To play with the hyper parameters, we are always training the model again
     '''with open(f'./LSTMmodel.pickle', 'wb') as f:
        pickle.dump(model, f)
     with open(f'./LSTMmodel.pickle','rb') as f:
         model = pickle.load(f)'''
-
-    #Test Trained Model on Val data 
     df_test = pd.read_csv('data/val.csv')
-    X, y = prepare_data(df_test,num_time_steps=num_time_steps, num_features=num_features)
-
-    model.compile(loss='mse', optimizer='adam', metrics=['mean_squared_error', 'mean_absolute_error', 'mean_absolute_percentage_error', 'cosine_proximity'])
+    y_pred, final_model = LSTM_Eval(model, df_test, num_time_steps=num_time_steps)
     
-    score = model.evaluate(X, y , verbose=0)
-    for i in range(5):
-        print("%s: %.2f%%" % (model.metrics_names[i], score[i]*100))
 
-    y_ = model.predict(X)
-    results(y,y_)
+ 
   
     
