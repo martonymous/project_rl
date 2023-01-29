@@ -31,7 +31,7 @@ def prepare_data(df, num_time_steps=10, num_predict_steps=6, num_features=1):
 
     X = np.array(X)
     Y = np.array(Y)
-    print("X.shape: ", X.shape,"    Y.shape: ",Y.shape)
+    #print("X.shape: ", X.shape,"    Y.shape: ",Y.shape)
 
     #Reshape X to fit the LSTM format     
     X = X.reshape((X.shape[0], num_time_steps, num_features))
@@ -67,32 +67,34 @@ def LSTM_Eval(LSTM, df_test, num_time_steps=10, num_predict_steps=6, num_feature
     #Test Trained Model on Val data 
     X, Y = prepare_data(df_test, num_time_steps=num_time_steps, num_predict_steps=num_predict_steps)
     LSTM.compile(loss='mse', optimizer='adam', metrics=['mean_squared_error', 'mean_absolute_error', 'mean_absolute_percentage_error', 'cosine_proximity'])
-    
     score = LSTM.evaluate(X, Y , verbose=0)
     for i in range(5):
         print("%s: %.2f%%" % (LSTM.metrics_names[i], score[i]*100))
-
+    
     Y_pred = LSTM.predict(X)
 
     #print("Y_pred shape",Y_pred.shape,"Y shape",Y.shape)
 
-    Y_true = []
-    for i in range(num_time_steps, len(df_test) - num_predict_steps):
-        Y_true.append(df_test.iloc[i+num_predict_steps]['prices'])
-    Y_true = np.array(Y_true)
+    #Y_true = []
+    #for i in range(num_time_steps, len(df_test) - num_predict_steps):
+    #    Y_true.append(df_test.iloc[i+num_predict_steps]['prices'])
+    #Y_true = np.array(Y_true)
 
-    avg_Y_pred=np.mean(Y_pred, axis=1)
-    avg_Y=np.mean(Y, axis=1)
+    #avg_Y_pred=np.mean(Y_pred, axis=1)
+    #avg_Y=np.mean(Y, axis=1)
     #results(Y_true,avg_Y_pred,avg_Y)
-
-    crucial_time_points=find_null_derivatives_points(Y_pred)
-    plt.vlines(x = crucial_time_points, ymin = -2, ymax = 8, colors = 'red')
-    plt.plot(Y_true, label='Real values')
+    #find_extreme_predictions(Y_pred, X)
+    #crucial_time_points=find_null_derivatives_points(Y_pred)
+    #positive_change, negative_change = find_derivatives_signal_changes(Y_pred, X)
+    #plt.vlines(x = positive_change, ymin = -2, ymax = 8, colors = 'red')
+    #plt.vlines(x = negative_change, ymin = -2, ymax = 8, colors = 'green')
+    #plt.plot(Y_true, label='Real values')
     #plt.plot(avg_Y_pred, label='Predicted Average')
-    plt.legend()
-    plt.ylim(-2, 8)
-    plt.show()
-
+    #plt.legend()
+    #plt.ylim(-2, 8)
+    #plt.show()
+    actionlist=assign_action_points(Y_pred, X)
+    #print(actionlist[:100])
     return LSTM, Y_pred
 
 #Given a set of points Y, fit the data with a non-linear function
@@ -110,41 +112,56 @@ def fit_and_derivative(Y):
     # Calculate the derivative at every x point
     derivatives = [derivative_func(x_i) for x_i in x]
     derivatives = np.array(derivatives)
-    return derivatives
+    return derivatives, Y
 
-#Given a List of lists of price predictions
-#returns the indexs where those price/time points have a derivative x
-#Where -0.005 > x < 0.005
-def find_null_derivatives_points(Y_pred):
-    derivative_prediction=[]
+def has_extreme(values_list, mean, std):
+    boolean=False
+    threshold = 1 * std
+    lower, upper = mean - threshold, mean + threshold
+    for value in values_list:
+        if value < lower or value > upper:
+            boolean = True
+    return boolean
 
-    for idx1, y_predictions in enumerate(Y_pred):
-        derivatives = fit_and_derivative(y_predictions)
-        for idx2, derivative in enumerate(derivatives):
-            if (derivative < 0.005 and derivative > -0.005):
-            #if derivative ==0 :
-                derivative_prediction.append(idx1+idx2)
-    derivative_prediction,i=np.unique(derivative_prediction, return_index=True)
-    #print(len(derivative_prediction))
-    #print(derivative_prediction[:20])
-    return derivative_prediction
+#assuming there will only be one change of derivative signal on the provided value list
+def signal_change(values_list):
+    change=''
+    derivatives , ys = fit_and_derivative(values_list)
+    for i, derivative in enumerate(derivatives):
+        if (derivatives[i-1] < 0 and derivatives[i] > 0):
+            change = 'positive'
+        elif(derivatives[i-1] > 0 and derivatives[i] < 0):
+            change = 'negative'
+    return change
 
-#Given a List of lists of price predictions
-#returns the indexs of crucial points,
-#A Crucial point i, has i-1  with negative derivative 
-#And i+1 with positive derivative 
-def find_derivatives_signal_changes(Y_pred):
-    derivative_prediction=[]
+def assign_action_points(Y_pred, X):
+    inital_hold = Y_pred.shape[1]+X.shape[1]
+    action_list = list(np.zeros(inital_hold))
+    for i in range(len(X)):
+        if has_extreme(Y_pred[i], np.mean(X[i]), np.std(X[i])):
+            if signal_change(Y_pred[i])=='positive':
+                action_list.append(1)
+            elif signal_change(Y_pred[i])=='negative':
+                action_list.append(-1)
+            else:
+                action_list.append(0)
+        else:
+            action_list.append(0)
+    action_list = np.roll(action_list, -2)
+    action_list = change_array(action_list)
+    return action_list
 
-    '''for idx1, y_predictions in enumerate(Y_pred):
-        derivatives = fit_and_derivative(y_predictions)
-        for idx2, derivative in enumerate(derivatives):
-            if (derivative < 0.005 and derivative > -0.005):
-                derivative_prediction.append(idx1+idx2)
-    derivative_prediction,i=np.unique(derivative_prediction, return_index=True)
-    #print(len(derivative_prediction))
-    #print(derivative_prediction[:20])'''
-    return derivative_prediction
+
+def change_array(arr):
+    result = arr.copy()
+    for i in range(1, len(arr) - 1):
+        if arr[i] == 1:
+            result[i - 1] = 1
+            result[i + 1] = 1
+        elif arr[i] == -1:
+            result[i - 1] = -1
+            result[i + 1] = -1
+    return result
 
 # Plot the real values against the predictions
 def results(Y_true,avg_Y_pred,avg_Y):
@@ -157,7 +174,7 @@ def results(Y_true,avg_Y_pred,avg_Y):
     plt.ylim(-2, 8)
     plt.show()
 
-    
+
 if __name__ == "__main__":
     #Hyperparameters
     num_time_steps = 25
@@ -198,4 +215,49 @@ if __name__ == "__main__":
     #Not just changes on the signal behaviour, but meaningful changes.
     # 
     #Check the period. Normally the period is around 25 time steps.
-    # Normal distance between 2 low points   
+    # Normal distance between 2 low points 
+
+'''#Given a List of lists of price predictions
+#returns the indexs where those price/time points have a derivative x
+#Where -0.005 > x < 0.005
+def find_null_derivatives_points(Y_pred):
+    derivative_prediction=[]
+
+    for idx1, y_predictions in enumerate(Y_pred):
+        derivatives = fit_and_derivative(y_predictions)
+        for idx2, derivative in enumerate(derivatives):
+            if (derivatives[idx2] < 0.005 and derivatives[idx2] > -0.005):
+            #if derivative ==0 :
+                derivative_prediction.append(idx1+idx2)
+
+    derivative_prediction,i=np.unique(derivative_prediction, return_index=True)
+    print(len(derivative_prediction))
+    print(derivative_prediction[:20])
+    return derivative_prediction
+
+#Given a List of lists of price predictions
+#returns the indexs of crucial points,
+#A Crucial point i, has i-1  with negative derivative 
+#And i+1 with positive derivative 
+def find_derivatives_signal_changes(Y_pred, X):
+    positive_change=[]
+    negative_change=[]
+    for idx1, y_predictions in enumerate(Y_pred):
+        for previous in X:
+            mean=np.mean(previous, axis=1)
+            #print('mean',mean)
+        derivatives , y_predictions = fit_and_derivative(y_predictions)
+        for idx2, derivative in enumerate(derivatives):
+            if (derivatives[idx2-1] < 0 and derivatives[idx2] > 0):
+                positive_change.append(idx1+(idx2-1))
+            if (derivatives[idx2-1] > 0 and derivatives[idx2] < 0):
+                negative_change.append(idx1+(idx2-1))
+
+    positive_change,i=np.unique(positive_change, return_index=True)
+    negative_change,i=np.unique(negative_change, return_index=True)        
+    print("Low_points",len(positive_change))
+    print(positive_change[:5])
+    print("High_points",len(negative_change))
+    print(negative_change[:5])
+
+    return positive_change, negative_change'''  

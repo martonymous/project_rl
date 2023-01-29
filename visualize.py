@@ -9,8 +9,8 @@ def visualize_validation(filename: str, start: int, end: int):
     ys = val["prices"].to_list()[start:end]
     choices = val["actions"].to_list()[start:end]
 
-    sell_markers = [i for i, x in enumerate(choices) if x == 0]
-    buy_markers = [i for i, x in enumerate(choices) if x == 1]
+    sell_markers = [i for i, x in enumerate(choices) if x == 'sell']
+    buy_markers = [i for i, x in enumerate(choices) if x == 'buy']
 
     # plot the agent's behavior within a specific time segment: green = sell, red = sell
     plt.plot(list(range(len(ys))), ys, color="black", marker="o", mfc="green", ls="dotted", markersize=10, markevery=sell_markers, label="sell electricity")
@@ -24,5 +24,7 @@ def visualize_validation(filename: str, start: int, end: int):
     plt.plot(val["water_level"].to_list()[start:end])
     plt.show()
 
+    print("Final profit:", val['cash'].iloc[-1])
+
 if __name__ == "__main__":
-    visualize_validation("data/eval_long.csv", 15000, 16500)
+    visualize_validation("data/eval_lstm.csv", 15000, 16500)
