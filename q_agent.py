@@ -38,7 +38,9 @@ class QAgent():
         self.bin_prices = np.geomspace(1, self.env.data["prices"].max(), self.bin_size-1)
         self.bin_prices = np.insert(self.bin_prices, 0, 0)
         self.bin_water_level = np.linspace(0, 100000, self.env.water_level_dim)
-        self.bins = [self.bin_prices, self.bin_water_level]
+        self.bin_rsi = np.linspace(self.env.data["rsi"].min(), self.env.data["rsi"].max(), self.env.rsi_dim)
+        self.bin_roc = np.linspace(self.env.data["roc"].min(), self.env.data["roc"].max(), self.env.roc_dim)
+        self.bins = [self.bin_prices, self.bin_water_level, self.bin_rsi, self.bin_roc]
     
     def discretize_state(self, state):
         
@@ -53,6 +55,8 @@ class QAgent():
         binned_states = [
             "electricity_cost",
             "water_level",
+            "rsi",
+            "roc"
         ]
     
         for i in range(len(self.bins)):
@@ -63,11 +67,12 @@ class QAgent():
     def create_Q_table(self, init_val):
         #Initialize all values in the Q-table 
         self.Qtable = np.zeros((
-            self.env.time_hour_dim, 
+            self.env.water_level_dim,
+            self.env.rsi_dim,
+            self.env.roc_dim,
+            self.env.time_hour_dim,
+            self.env.time_month_dim,
             self.bin_size, 
-            self.env.time_month_dim, 
-            self.env.water_level_dim, 
-            self.env.time_weekend_dim,
             self.action_space
         ))
         self.Qtable = self.Qtable + init_val
@@ -81,12 +86,13 @@ class QAgent():
         plt.ylabel('Average reward', fontsize = 10)
         plt.show()
 
-def simulate(agent, i, episodes = 1000, learning_rate=0.1):
+def simulate(agent, i, episodes = 1000, learning_rate=0.1, alr_start=None):
     # if i % 25 == 0:
     #     print(f'Please wait, the algorithm is learning! The current simulation is {i}')
-
-    if agent.adapting_learning_rate:
-        learning_rate = learning_rate/np.sqrt((i/10)+1)
+    if not alr_start:
+        alr_start = 0
+    if agent.adapting_learning_rate and i > alr_start:
+        learning_rate = learning_rate/np.sqrt(((i-alr_start)/10)+1)
 
     # If adaptive epsilon rate
     if agent.adaptive_epsilon:
@@ -126,7 +132,7 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
 
         # Pick a greedy action
         else:
-            a = agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"], state["water_level"], state["time_weekend"], :]
+            a = agent.Qtable[state["water_level"], state["rsi"], state["roc"], state["time_hour"], state["time_month"], state["electricity_cost"], :]
             action = np.argmax(a)
             
         # Now sample the next_state, reward, done and info from the environment        
@@ -149,23 +155,21 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         
         # Target value
         
-        a = agent.Qtable[next_state["time_hour"], next_state["electricity_cost"], next_state["time_month"], next_state["water_level"], next_state["time_weekend"]]
+        a = agent.Qtable[next_state["water_level"], next_state["rsi"], next_state["roc"], next_state["time_hour"], next_state["time_month"], next_state["electricity_cost"],]
         Q_target = (reward + agent.discount_rate*np.max(a))
         
         # Calculate the Temporal difference error (delta)
-        delta = learning_rate * (Q_target - agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"], state["water_level"], state["time_weekend"], action])
+        delta = learning_rate * (Q_target - agent.Qtable[state["water_level"], state["rsi"], state["roc"], state["time_hour"], state["time_month"], state["electricity_cost"], action])
         
         # Update the Q-value
+        # if phase_nr == 0:
+        #     agent.Qtable[state["water_level"], state["rsi"], state["roc"], :, :, :, action] =agent.Qtable[state["water_level"], state["rsi"], state["roc"], :, :, :, action] + delta
         if phase_nr == 0:
-            agent.Qtable[state["time_hour"], :, :, :, :, action] = agent.Qtable[state["time_hour"], :, :, :, :, action] + delta
-        elif phase_nr == 1:
-            agent.Qtable[state["time_hour"], state["electricity_cost"], :, :, :, action] = agent.Qtable[state["time_hour"], state["electricity_cost"], :, :, :, action] + delta
-        elif phase_nr == 2:
-            agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"],  :, :, action] = agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"], :, :, action] + delta
-        elif phase_nr == 3:
-            agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"], state["water_level"], :, action] = agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"], state["water_level"], :, action] + delta
+            agent.Qtable[state["water_level"], state["rsi"], state["roc"], state["time_hour"], :, :, action] = agent.Qtable[state["water_level"], state["rsi"], state["roc"], state["time_hour"], :, :, action] + delta
+        elif phase_nr ==1:
+            agent.Qtable[state["water_level"], state["rsi"], state["roc"], state["time_hour"], state["time_month"], :, action] = agent.Qtable[state["water_level"], state["rsi"], state["roc"], state["time_hour"], state["time_month"], :, action] + delta
         else:
-            agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"], state["water_level"], state["time_weekend"], action] = agent.Qtable[state["time_hour"], state["electricity_cost"], state["time_month"], state["water_level"], state["time_weekend"], action] + delta
+            agent.Qtable[state["water_level"], state["rsi"], state["roc"], state["time_hour"], state["time_month"], state["electricity_cost"], action] = agent.Qtable[state["water_level"], state["rsi"], state["roc"], state["time_hour"], state["time_month"], state["electricity_cost"], action] + delta
 
         # Update the reward and the hyperparameters
         total_rewards += reward
@@ -183,7 +187,7 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         agent.rewards = []
 
 def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsilon=0.5, discount_start=0, discount_end=100000, epsilon_decay_start = 100000, epsilon_decay_end = 200000, adaptive_discount=True, adaptive_epsilon = False, 
-              adapting_learning_rate = False, phase_bins=[0, 50000, 100000, 150000, 200000, 250000], multiprocessing=False, max_workers=None, checkpoints=True, checkpoint_save_every = 2000):
+              adapting_learning_rate = False, alr_start=None, phase_bins=[0, 50000, 100000, 150000, 200000, 250000], multiprocessing=False, max_workers=None, checkpoints=True, checkpoint_save_every = 2000):
         
         '''
         Params:
@@ -208,8 +212,9 @@ def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsil
         agent.adaptive_discount = adaptive_discount
         agent.adapting_learning_rate = adapting_learning_rate
         agent.adaptive_epsilon = adaptive_epsilon
-        agent.learning_rate = learning_rate
+        agent.alr_start = alr_start
 
+        agent.learning_rate = learning_rate
         agent.epsilon = epsilon
         agent.epsilon_decay_start = epsilon_decay_start
         agent.epsilon_decay_end = epsilon_decay_end
@@ -219,8 +224,8 @@ def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsil
         
         #Set start epsilon, so here we want a starting exploration rate of 1
         agent.epsilon_start = 1
-        agent.epsilon_end = 0.6
-        agent.discount_start_value = 0.95
+        agent.epsilon_end = 0.2
+        agent.discount_start_value = 0.9
         agent.discount_end_value = 0.999
 
         agent.phase_bins = phase_bins
@@ -238,7 +243,7 @@ def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsil
                 results = p.starmap(simulate, args)
         else:
             for i in range(simulations):
-                simulate(agent, i, 1000, 0.1)
+                simulate(agent, i, 1000, 0.1, alr_start=agent.alr_start)
                 if checkpoints and (i % checkpoint_save_every == 0):
                     if phase_bins:
                         save_model(q_agent, np.digitize(i, phase_bins), unique_id)
@@ -250,6 +255,7 @@ def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsil
         print('The simulation is done!')
 
 def evaluate(agent, val_data):
+    # agent.visualize_rewards()
     rewards = 0
     action_sequence, cash, water_level, all_rewards = [], [], [], []
 
@@ -261,11 +267,12 @@ def evaluate(agent, val_data):
         state = agent.discretize_state(state)
         
         a = agent.Qtable[
-            state["time_hour"], 
-            state["electricity_cost"], 
-            state["time_month"], 
-            state["water_level"], 
-            state["time_weekend"], :
+            state["water_level"],
+            state["rsi"],
+            state["roc"],
+            state["time_hour"],
+            state["time_month"],
+            state["electricity_cost"], :
         ]
         action = np.argmax(a)
         action_sequence.append(action)
@@ -275,6 +282,8 @@ def evaluate(agent, val_data):
         water_level.append(next_state["water_level"])
         all_rewards.append(rewards)
         cash.append(info["profit"])
+
+    # agent.visualize_rewards()
 
     print('The evaluation is done!')
     return action_sequence, cash, all_rewards, water_level
@@ -289,16 +298,19 @@ if __name__ == "__main__":
         make_directory_for_run(UNIQUE_RUN_ID)
 
         data = pd.read_csv('data/train_processed.csv')
-        q_agent = QAgent(data=data, discount_rate=0.95)
-        train(q_agent, UNIQUE_RUN_ID, simulations=100001, learning_rate=0.25, episodes=16800, epsilon=1.0, discount_start=0, discount_end=60000, epsilon_decay_start=60000, epsilon_decay_end=90000, adaptive_discount=False, adapting_learning_rate=False, adaptive_epsilon=False, phase_bins=None, max_workers=8, multiprocessing=False, checkpoint_save_every=10)
+        q_agent = QAgent(data=data, discount_rate=0.99999)
+        train(q_agent, UNIQUE_RUN_ID, simulations=100001, learning_rate=0.25, episodes=8400, epsilon=1, discount_start=60000, discount_end=80000, epsilon_decay_start=80000, epsilon_decay_end=100000, adaptive_discount=True, adapting_learning_rate=False, adaptive_epsilon=False, phase_bins=[0, 20001, 40001, 60001, 100001], max_workers=8, multiprocessing=False, checkpoint_save_every=10)
 
     else:
 
-        list_of_files = glob.glob('./runs/*') # * means all if need specific format then *.csv
+        list_of_files = glob.glob('./runs/*')
+        list_of_files.sort(key=os.path.getctime) # * means all if need specific format then *.csv
         latest_folder = max(list_of_files, key=os.path.getctime)
+        latest_folder = list_of_files[-1]
 
         list_of_files = glob.glob(f'{latest_folder}/*')
         latest_file = max(list_of_files, key=os.path.getctime)
+        latest_file = list_of_files[-1]
         print(latest_file)
 
         val_data = pd.read_csv('data/val.csv')
