@@ -153,7 +153,7 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         delta = learning_rate * (Q_target - agent.Qtable[state["time_hour"], state["lstm"], action])
         
         # Update the Q-value
-        agent.Qtable[state["time_hour"], action] = agent.Qtable[state["time_hour"], state["lstm"], action] + delta
+        agent.Qtable[state["time_hour"], state["lstm"], action] = agent.Qtable[state["time_hour"], state["lstm"], action] + delta
 
         # Update the reward and the hyperparameters
         total_rewards += reward
@@ -227,12 +227,13 @@ def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsil
         else:
             for i in range(simulations):
                 simulate(agent, i, 1000, 0.1)
-                if checkpoints and (i % checkpoint_save_every == 0) and phase_bins:
+                '''if checkpoints and (i % checkpoint_save_every == 0) and phase_bins:
                     save_model(q_agent, np.digitize(i, phase_bins), unique_id)
             if not checkpoints:
-                save_model(q_agent, i, unique_id)
+                save_model(q_agent, i, unique_id)'''
 
         print('The simulation is done!')
+        return agent
 
 def evaluate(agent, val_data):
     rewards = 0
@@ -247,7 +248,7 @@ def evaluate(agent, val_data):
         
         a = agent.Qtable[
             state["time_hour"],
-            state["lstm"] :
+            state["lstm"], :
         ]
         action = np.argmax(a)
         action_sequence.append(action)
@@ -262,28 +263,24 @@ def evaluate(agent, val_data):
     return action_sequence, cash, all_rewards, water_level
         
 if __name__ == "__main__":
-    eval = False
+    eval = True
 
     if not eval:
 
         Seed = 42
 
-        data = pd.read_csv('data/train_processed.csv')
+        data = pd.read_csv('data/train_processed_wth_lstm.csv')
         q_agent = QAgent(data=data, discount_rate=0.95)
-        train(q_agent, 'q_agent_hour', simulations=10001, learning_rate=0.25, episodes=16800, epsilon=1.0, discount_start=0, discount_end=1000, epsilon_decay_start=60000, epsilon_decay_end=90000, adaptive_discount=False, adapting_learning_rate=False, adaptive_epsilon=False, phase_bins=None, max_workers=8, multiprocessing=False, checkpoints=False)
-
+        q_agent = train(q_agent, 'q_agent_hour_lstm', simulations=100001, learning_rate=0.25, episodes=16800, epsilon=1.0, discount_start=0, discount_end=1000, epsilon_decay_start=60000, epsilon_decay_end=90000, adaptive_discount=False, adapting_learning_rate=False, adaptive_epsilon=False, phase_bins=None, max_workers=8, multiprocessing=False, checkpoints=True)
+        with open('data/q_agent_hour_lstm','wb') as f:
+            pickle.dump(q_agent, f)
     else:
 
-        list_of_files = glob.glob(f'runs/q_agent_hour/*')
-        latest_file = max(list_of_files, key=os.path.getctime)
-        print(latest_file)
+        val_data = pd.read_csv('data/val_processed_wth_lstm.csv')
 
-        val_data = pd.read_csv('data/val_processed.csv')
-
-        with open(latest_file,'rb') as f:
+        with open('data/q_agent_hour_lstm','rb') as f:
             trained_agent = pickle.load(f)
-
         actions, cash, rewards, water_level = evaluate(trained_agent, val_data)
 
         df = pd.DataFrame({"prices": val_data["prices"], 'actions': actions, "cash": cash, "water_level": water_level, "rewards": rewards})
-        df.to_csv('runs/q_agent_hour/eval.csv')
+        df.to_csv('data/eval_q_agent_hour_lstm.csv')

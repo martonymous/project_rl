@@ -25,6 +25,7 @@ def visualize_validation(filename: str, start: int, end: int):
     plt.show()
     plt.plot(val["water_level"].to_list()[start:end])
     plt.show()
+    print("Final profit:", val['cash'].iloc[-1])
 
 if __name__ == "__main__":
-    visualize_validation("data/eval_long.csv", 15000, 15200)
+    visualize_validation("data/eval_q_agent_hour_lstm.csv", 15000, 15200)
