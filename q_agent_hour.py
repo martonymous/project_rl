@@ -260,7 +260,7 @@ def evaluate(agent, val_data):
     return action_sequence, cash, all_rewards, water_level
         
 if __name__ == "__main__":
-    eval = True
+    eval = False
 
     if not eval:
 
@@ -268,7 +268,7 @@ if __name__ == "__main__":
 
         data = pd.read_csv('data/train_processed.csv')
         q_agent = QAgent(data=data, discount_rate=0.95)
-        train(q_agent, 'q_agent_hour', simulations=10001, learning_rate=0.25, episodes=16800, epsilon=1.0, discount_start=0, discount_end=1000, epsilon_decay_start=60000, epsilon_decay_end=90000, adaptive_discount=False, adapting_learning_rate=False, adaptive_epsilon=False, phase_bins=None, max_workers=8, multiprocessing=False, checkpoints=False)
+        train(q_agent, 'q_agent_hour', simulations=10000, learning_rate=0.25, episodes=16800, epsilon=1.0, discount_start=0, discount_end=1000, epsilon_decay_start=60000, epsilon_decay_end=90000, adaptive_discount=False, adapting_learning_rate=False, adaptive_epsilon=False, phase_bins=None, max_workers=8, multiprocessing=False, checkpoints=True)
 
     else:
 
@@ -276,7 +276,7 @@ if __name__ == "__main__":
         latest_file = max(list_of_files, key=os.path.getctime)
         print(latest_file)
 
-        val_data = pd.read_csv('data/val.csv')
+        val_data = pd.read_csv('data/val_processed.csv')
 
         with open(latest_file,'rb') as f:
             trained_agent = pickle.load(f)

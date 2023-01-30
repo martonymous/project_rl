@@ -27,8 +27,8 @@ class DamWorldEnv(gym.Env):
         self.time_month_dim = 12
         self.water_level_dim = 11
         self.water_capacity = 100000
-        self.rsi_dim = 11
-        self.roc_dim = 11
+        #self.rsi_dim = 11
+        #self.roc_dim = 11
         # for converting water level (m³) to MWh
         #  pot. energy of 1 m³ = mass *    g *  h * (Joule to MWH factor)
         self.conversion_factor = 1000 * 9.81 * 30 * (2 + (7/9)) * (10 ** -10)
@@ -45,8 +45,8 @@ class DamWorldEnv(gym.Env):
                 "water_level": spaces.Discrete(self.water_level_dim, 42, 0),
                 "electricity_cost": spaces.Box(0, self.data["prices"].max()),
 
-                "indicator_rsi": spaces.Discrete(self.rsi_dim, 42, 0),
-                "indicator_roc": spaces.Discrete(self.roc_dim, 42, 0),
+                #"indicator_rsi": spaces.Discrete(self.rsi_dim, 42, 0),
+                #"indicator_roc": spaces.Discrete(self.roc_dim, 42, 0),
             }
         )
 
@@ -57,8 +57,8 @@ class DamWorldEnv(gym.Env):
         self.weekend = self.data["weekend"].iloc[self.index]
         self.month = self.data["month"].iloc[self.index]
         self.electricity_cost = self.data["prices"].iloc[self.index]
-        self.rsi = self.data["rsi"].iloc[self.index]
-        self.roc = self.data["roc"].iloc[self.index]
+        #self.rsi = self.data["rsi"].iloc[self.index]
+        #self.roc = self.data["roc"].iloc[self.index]
 
         return {
             "time_hour": self.hour, 
@@ -70,8 +70,8 @@ class DamWorldEnv(gym.Env):
             "electricity_cost": self.electricity_cost,
             "cash": self.cash,
             "value": self.value,
-            "rsi": self.rsi,
-            "roc": self.roc
+            #"rsi": self.rsi,
+            #"roc": self.roc
         }
     
     def _get_info(self):
