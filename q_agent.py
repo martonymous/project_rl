@@ -306,7 +306,7 @@ if __name__ == "__main__":
         latest_file = max(list_of_files, key=os.path.getctime)
         print(latest_file)
 
-        val_data = pd.read_csv('data/val.csv')
+        val_data = pd.read_csv('data/val_processed.csv')
 
         with open(latest_file,'rb') as f:
             trained_agent = pickle.load(f)

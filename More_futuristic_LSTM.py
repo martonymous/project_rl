@@ -11,23 +11,24 @@ import pickle
 
 #Normalizes df column by Z score method
 def normalize_z_score(df, column_name):
-    mean = df[column_name].mean()
-    std = df[column_name].std()
-    df[column_name] = (df[column_name] - mean) / std
-    return df
+    normalized_df = df.copy(deep = True)
+    mean = normalized_df[column_name].mean()
+    std = normalized_df[column_name].std()
+    normalized_df[column_name] = (normalized_df[column_name] - mean) / std
+    return normalized_df
 
 
 def prepare_data(df, num_time_steps=10, num_predict_steps=6, num_features=1):
     #Normalize Prices
-    df = normalize_z_score(df,'prices')
+    normalized_df = normalize_z_score(df,'prices')
     # Create empty lists to store X and y
     X, Y = [], []
     # Iterate over the dataframe
-    for i in range(len(df) - (num_time_steps+num_predict_steps)):
-        X.append(df.iloc[i:i+num_time_steps]['prices'].values)
+    for i in range(len(normalized_df) - (num_time_steps+num_predict_steps)):
+        X.append(normalized_df.iloc[i:i+num_time_steps]['prices'].values)
 
-    for i in range(num_time_steps, len(df) -num_predict_steps):
-        Y.append(df.iloc[i:i+num_predict_steps]['prices'].values)
+    for i in range(num_time_steps, len(normalized_df) -num_predict_steps):
+        Y.append(normalized_df.iloc[i:i+num_predict_steps]['prices'].values)
 
     X = np.array(X)
     Y = np.array(Y)
@@ -123,6 +124,17 @@ def has_extreme(values_list, mean, std):
             boolean = True
     return boolean
 
+def extreme_type(values_list, mean, std):
+    type=''
+    threshold = 1 * std
+    predictions_mean = np.mean(values_list)
+    lower_bound, upper_bound = mean - threshold, mean + threshold
+    if predictions_mean < lower_bound:
+        type="min"
+    elif predictions_mean > upper_bound:
+        type="max"
+    return type
+
 #assuming there will only be one change of derivative signal on the provided value list
 def signal_change(values_list):
     change=''
@@ -140,15 +152,26 @@ def assign_action_points(Y_pred, X):
     for i in range(len(X)):
         if has_extreme(Y_pred[i], np.mean(X[i]), np.std(X[i])):
             if signal_change(Y_pred[i])=='positive':
-                action_list.append(1)
+                    action_list.append(1)
             elif signal_change(Y_pred[i])=='negative':
-                action_list.append(-1)
+                    action_list.append(-1)
             else:
-                action_list.append(0)
+                '''
+                This decreased performance a lil, but maybe we should also mark this points, like with 0.5
+                Or maybe we can also depending on how much std away they are, assign different value, 
+                from for example -3 to 3. 3 being a prediction 3 std away from the preivous points mean
+
+                if extreme_type(Y_pred[i], np.mean(X[i]), np.std(X[i]))=='min':
+                    action_list.append(1)
+                elif extreme_type(Y_pred[i], np.mean(X[i]), np.std(X[i]))=='max':
+                    action_list.append(-1)
+                else:'''
+                action_list.append(0)  
         else:
             action_list.append(0)
-    action_list = np.roll(action_list, -2)
-    action_list = change_array(action_list)
+    #action_list = np.roll(action_list, -1*(Y_pred.shape[1]-1))
+    #action_list = change_array(action_list)
+    action_list = [int(i) for i in action_list]
     return action_list
 
 
