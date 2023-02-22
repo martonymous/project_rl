@@ -1,6 +1,6 @@
-import gymnasium as gym
-from gymnasium import spaces
-from gymnasium.envs.registration import register
+import gym
+from gym import spaces
+from gym.envs.registration import register
 import numpy as np
 import pandas as pd
 import random
@@ -13,24 +13,9 @@ class DamWorldEnv(gym.Env):
         self.data = observation_data
         self.Actions = {
             0: -18000,
-            1: -10000,
-            2: -4000,
-            3: -2000,
-            4: 0,
-            5: 2000,
-            6: 4000,
-            7: 10000,
-            8: 18000,
+            1: 0,
+            2: 18000,
         }
-
-        # self.flow_multiplier = {
-        #     0: 1,
-        #     1: 2,
-        #     2: 4,
-        #     3: 9,
-        #     4: 18
-        # }
-        # self.flow_rate = 1000
 
         self.sell_efficiency = 0.9
         self.buy_efficiency = 0.8
@@ -40,8 +25,10 @@ class DamWorldEnv(gym.Env):
         self.time_weekend_dim = 2
         self.time_week_dim = 53
         self.time_month_dim = 12
-        self.water_level_dim = 21
+        self.water_level_dim = 11
         self.water_capacity = 100000
+        self.rsi_dim = 11
+        self.roc_dim = 11
         # for converting water level (m³) to MWh
         #  pot. energy of 1 m³ = mass *    g *  h * (Joule to MWH factor)
         self.conversion_factor = 1000 * 9.81 * 30 * (2 + (7/9)) * (10 ** -10)
@@ -56,7 +43,10 @@ class DamWorldEnv(gym.Env):
                 "time_month": spaces.Discrete(self.time_month_dim, 42, 0),
 
                 "water_level": spaces.Discrete(self.water_level_dim, 42, 0),
-                "electricity_cost": spaces.Box(0, self.data["prices"].max())
+                "electricity_cost": spaces.Box(0, self.data["prices"].max()),
+
+                "indicator_rsi": spaces.Discrete(self.rsi_dim, 42, 0),
+                "indicator_roc": spaces.Discrete(self.roc_dim, 42, 0),
             }
         )
 
@@ -67,6 +57,8 @@ class DamWorldEnv(gym.Env):
         self.weekend = self.data["weekend"].iloc[self.index]
         self.month = self.data["month"].iloc[self.index]
         self.electricity_cost = self.data["prices"].iloc[self.index]
+        self.rsi = self.data["rsi"].iloc[self.index]
+        self.roc = self.data["roc"].iloc[self.index]
 
         return {
             "time_hour": self.hour, 
@@ -77,7 +69,9 @@ class DamWorldEnv(gym.Env):
             "water_level": self.water_level,
             "electricity_cost": self.electricity_cost,
             "cash": self.cash,
-            "value": self.value
+            "value": self.value,
+            "rsi": self.rsi,
+            "roc": self.roc
         }
     
     def _get_info(self):
@@ -126,13 +120,12 @@ class DamWorldEnv(gym.Env):
         value_weight = 1
         cash_weight = 0
         reward = value_weight * (self.value - previous_total_value) + cash_weight * (self.cash - previous_cash)
-        # reward = self.cash - previous_cash
-
-        # ALTERNATIVE REWARD CALCULATION
-        # if self.cash > previous_cash:
-        #     reward = 1
-        # else:
-        #     reward = -1
+        
+        if (action < 0) and (self.water_level == 0):
+            reward = -1000
+        if (action > 0) and (self.water_level == self.water_capacity):
+            reward = -1000
+    
 
         return observation, reward, terminated, False, info
 

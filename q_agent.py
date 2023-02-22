@@ -3,26 +3,18 @@ from utils import *
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import gymnasium as gym
+import gym
 from multiprocessing import Pool, cpu_count
 import pickle, os
 
 
 class QAgent():
     
-    def __init__(self, data: pd.DataFrame, bin_size = 101, discount_rate = 0.999):
-        
-        '''
-        Params:
-        
-        env_name = name of the specific environment that the agent wants to solve
-        discount_rate = discount rate used for future rewards
-        bin_size = number of bins used for discretizing the state space
-        
-        '''
-        
-        # create an environment
+    def __init__(self, data: pd.DataFrame, val_data: pd.DataFrame, bin_size = 26, discount_rate = 0.9):
+
+        # create a train and validation environment
         self.env = DamWorldEnv(observation_data=data)
+        self.val_env = DamWorldEnv(observation_data=val_data)
         
         # Set the discount rate and bin size
         self.discount_rate = discount_rate
@@ -34,20 +26,16 @@ class QAgent():
         #2: hold on
         self.action_space = self.env.action_space.n
     
-        # Create bins for continuous observation features, i.e. price and water level
-        self.bin_prices = np.linspace(0, self.env.data["prices"].max(), self.bin_size)
+        # Create bins for continuous observation features
+        self.bin_prices = np.geomspace(1, self.env.data["prices"].max(), self.bin_size-1)
+        self.bin_prices = np.insert(self.bin_prices, 0, 0)
         self.bin_water_level = np.linspace(0, 100000, self.env.water_level_dim)
+        self.bin_rsi = np.linspace(self.env.data["prices"].min(), self.env.data["prices"].max(), self.env.rsi_dim)
+        self.bin_roc = np.linspace(self.env.data["weekend"].min(), self.env.data["weekend"].max(), self.env.roc_dim)
         self.bins = [self.bin_prices, self.bin_water_level]
     
     def discretize_state(self, state):
         
-        '''
-        Params:
-        state = state observation that needs to be discretized
-        
-        Returns:
-        discretized state
-        '''
         self.state = state
         binned_states = [
             "electricity_cost",
@@ -60,14 +48,13 @@ class QAgent():
         return state
     
     def create_Q_table(self, init_val):
-        self.state_space = self.bin_size - 1
         #Initialize all values in the Q-table 
         self.Qtable = np.zeros((
-            self.env.time_hour_dim, 
+            self.env.time_hour_dim,
+            self.env.water_level_dim,
+            self.bin_size,
             self.env.time_weekend_dim,
-            self.env.time_month_dim, 
-            self.bin_size, 
-            self.env.water_level_dim, 
+            self.env.time_month_dim,
             self.action_space
         ))
         self.Qtable = self.Qtable + init_val
@@ -81,12 +68,15 @@ class QAgent():
         plt.ylabel('Average reward', fontsize = 10)
         plt.show()
 
-def simulate(agent, i, episodes = 1000, learning_rate=0.1):
+def simulate(agent, i, episodes = 1000):
     # if i % 25 == 0:
     #     print(f'Please wait, the algorithm is learning! The current simulation is {i}')
-
-    if agent.adapting_learning_rate:
-        learning_rate = learning_rate/np.sqrt((i/25000)+1)
+    if not agent.alr_start:
+        agent.alr_start = 0
+    if agent.adapting_learning_rate and i > agent.alr_start:
+        learning_rate = agent.alr_val/np.sqrt(((i-agent.alr_start)/agent.alr_factor)+1)
+    else:
+        learning_rate = agent.learning_rate
 
     # If adaptive epsilon rate
     if agent.adaptive_epsilon:
@@ -95,6 +85,11 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
     # If adaptive epsilon rate
     if agent.adaptive_discount:
         agent.discount_rate = np.interp(i, [agent.discount_start, agent.discount_end], [agent.discount_start_value, agent.discount_end_value])
+
+    if agent.phase_bins:
+        phase_nr = np.digitize(i, agent.phase_bins)-1
+    else:
+        phase_nr = -1
 
     # Initialize the state
     state = agent.env.reset()[0]   # reset returns a dict, need to take the 0th entry.
@@ -121,13 +116,7 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
 
         # Pick a greedy action
         else:
-            a = agent.Qtable[
-                state["time_hour"], 
-                state["time_weekend"],
-                state["time_month"],
-                state["electricity_cost"], 
-                state["water_level"],  :
-                ]
+            a = agent.Qtable[state["time_hour"], state["water_level"], state["electricity_cost"], state["time_weekend"], state["time_month"], :]
             action = np.argmax(a)
             
         # Now sample the next_state, reward, done and info from the environment        
@@ -136,53 +125,53 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         done =  terminated or truncated
         if episode == episodes:
             done = True
-
-        ## REWARD CALCULATION FOR TERMINAL STATE
-        # if done:
-        #     reward = info["total_value"]
-        # else:
-            # apply different reward, if desired
-
-        reward = reward
         
         # Now discretize the next_state
         next_state = agent.discretize_state(next_state)
         
-        # Target value 
-        Q_target = (
-            reward + agent.discount_rate*np.max(agent.Qtable[
-                state["time_hour"], 
-                state["time_weekend"],
-                state["time_month"],
-                state["electricity_cost"], 
-                state["water_level"],
-            ])
-        )
+        # Target value
+        a = agent.Qtable[next_state["time_hour"], next_state["water_level"], next_state["electricity_cost"], next_state["time_weekend"], next_state["time_month"]]
+        Q_target = (reward + agent.discount_rate*np.max(a))
         
         # Calculate the Temporal difference error (delta)
-        delta = learning_rate * (Q_target - agent.Qtable[
-            state["time_hour"], 
-            state["time_weekend"],
-            state["time_month"],
-            state["electricity_cost"], 
-            state["water_level"], 
-            action
-        ])
+        delta = learning_rate * (Q_target - agent.Qtable[state["time_hour"], state["water_level"], state["electricity_cost"], state["time_weekend"], state["time_month"], action])
         
         # Update the Q-value
-        agent.Qtable[
-            state["time_hour"], state["time_weekend"], state["time_month"], state["electricity_cost"], state["water_level"], action
-        ] = agent.Qtable[
-            state["time_hour"], state["time_weekend"], state["time_month"], state["electricity_cost"], state["water_level"], action
-        ] + delta
-        
+        # if phase_nr == 0:
+        #     agent.Qtable[state["water_level"], state["electricity_cost"], state["time_weekend"], :, :, :, action] =agent.Qtable[state["water_level"], state["electricity_cost"], state["time_weekend"], :, :, :, action] + delta
+        if phase_nr == 0:
+            agent.Qtable[state["time_hour"], state["water_level"], state["electricity_cost"], :, :, action] = agent.Qtable[state["time_hour"], state["water_level"], state["electricity_cost"], :, :, action] + delta
+        if phase_nr == 1:
+            agent.Qtable[state["time_hour"], state["water_level"], state["electricity_cost"], state["time_weekend"], :, action] = agent.Qtable[state["time_hour"], state["water_level"], state["electricity_cost"], state["time_weekend"], :, action] + delta
+        else:
+            agent.Qtable[state["time_hour"], state["water_level"], state["electricity_cost"], state["time_weekend"], state["time_month"], action] = agent.Qtable[state["time_hour"], state["water_level"], state["electricity_cost"], state["time_weekend"], state["time_month"], action] + delta
+
         # Update the reward and the hyperparameters
         total_rewards += reward
         state = next_state
     
-    if i % 25 == 0:
+    if i % 100 == 0:
         print(f"\nCurrent simulation:  {i}")
-    agent.rewards.append(total_rewards)
+        cash = []
+        agent.val_env.reset(val=True)
+
+        for i in range(len(agent.val_env.data)):
+            state = agent.val_env._get_obs()
+            state = agent.discretize_state(state)
+            
+            a = agent.Qtable[
+                state["time_hour"],
+                state["water_level"],
+                state["electricity_cost"],
+                state["time_weekend"],
+                state["time_month"], :
+            ]
+            action = np.argmax(a)
+
+            next_state, reward, terminated, truncated, info = agent.val_env.step(action) # step returns 5 outputs
+            cash.append(info["profit"])
+
+        agent.validation_scores.append(cash[-1])
 
     #Calculate the average score over 100 episodes
     if i % 20 == 0:
@@ -191,8 +180,8 @@ def simulate(agent, i, episodes = 1000, learning_rate=0.1):
         #Initialize a new reward list, as otherwise the average values would reflect all rewards!
         agent.rewards = []
 
-def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsilon=0.5, discount_start=0, discount_end=100000, epsilon_decay_start = 500000, epsilon_decay_end = 1000000, adaptive_discount=True, adaptive_epsilon = False, 
-              adapting_learning_rate = False, multiprocessing=False, max_workers=None, checkpoints=True, checkpoint_save_every = 2000):
+def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsilon=0.5, discount_start=0, discount_end=100000, epsilon_decay_start = 100000, epsilon_decay_end = 200000, adaptive_discount=True, adaptive_epsilon = False, 
+              adapting_learning_rate = False, alr_start=None, alr_factor=100, alr_val=0.5, phase_bins=[0, 50000, 100000, 150000, 200000, 250000], multiprocessing=False, max_workers=None, checkpoints=True, checkpoint_save_every = 2000):
         
         '''
         Params:
@@ -209,16 +198,20 @@ def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsil
         
         agent.rewards = []
         agent.average_rewards = []
+        agent.validation_scores = []
         
         #Call the Q table function to create an initialized Q table
-        agent.create_Q_table(init_val=-100)
+        agent.create_Q_table(init_val=100)
         
         #Set epsilon rate, epsilon decay, learning rate, and discount rate
         agent.adaptive_discount = adaptive_discount
         agent.adapting_learning_rate = adapting_learning_rate
         agent.adaptive_epsilon = adaptive_epsilon
-        agent.learning_rate = learning_rate
+        agent.alr_start = alr_start
+        agent.alr_factor = alr_factor
+        agent.alr_val = alr_val
 
+        agent.learning_rate = learning_rate
         agent.epsilon = epsilon
         agent.epsilon_decay_start = epsilon_decay_start
         agent.epsilon_decay_end = epsilon_decay_end
@@ -228,13 +221,11 @@ def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsil
         
         #Set start epsilon, so here we want a starting exploration rate of 1
         agent.epsilon_start = 1
-        agent.epsilon_end = 0.5
-        agent.discount_start_value = 0.8
+        agent.epsilon_end = 0.2
+        agent.discount_start_value = 0.9
         agent.discount_end_value = 0.999
-        
-        #If we choose adaptive learning rate, we start with a value of 1 and decay it over time!
-        if adapting_learning_rate:
-            agent.learning_rate = 1
+
+        agent.phase_bins = phase_bins
         
         if multiprocessing:
             args = [(agent, x, episodes, 0.1) for x in range(simulations)]
@@ -245,15 +236,19 @@ def train(agent, unique_id, simulations, learning_rate=0.1, episodes=1000, epsil
                 results = p.starmap(simulate, args)
         else:
             for i in range(simulations):
-                simulate(agent, i, 1000, 0.1)
+                simulate(agent, i, episodes)
                 if checkpoints and (i % checkpoint_save_every == 0):
-                    save_model(q_agent, i, unique_id)
+                    if phase_bins:
+                        save_model(q_agent, np.digitize(i, phase_bins), unique_id)
+                    else:
+                        save_model(q_agent, 'FINAL', unique_id)
             if not checkpoints:
                 save_model(q_agent, i, unique_id)
 
         print('The simulation is done!')
 
 def evaluate(agent, val_data):
+    # agent.visualize_rewards()
     rewards = 0
     action_sequence, cash, water_level, all_rewards = [], [], [], []
 
@@ -261,16 +256,16 @@ def evaluate(agent, val_data):
     agent.env.reset(val=True)
 
     for i in range(len(val_data)):
-        obs = agent.env._get_obs()
-        obs = agent.discretize_state(obs)
+        state = agent.env._get_obs()
+        state = agent.discretize_state(state)
         
         a = agent.Qtable[
-            obs["time_hour"], 
-            obs["time_weekend"],
-            obs["time_month"],
-            obs["electricity_cost"], 
-            obs["water_level"],  :
-            ]
+            state["time_hour"],
+            state["water_level"],
+            state["electricity_cost"],
+            state["time_weekend"],
+            state["time_month"], :
+        ]
         action = np.argmax(a)
         action_sequence.append(action)
 
@@ -280,26 +275,54 @@ def evaluate(agent, val_data):
         all_rewards.append(rewards)
         cash.append(info["profit"])
 
+    # agent.visualize_rewards()
+
     print('The evaluation is done!')
     return action_sequence, cash, all_rewards, water_level
         
 if __name__ == "__main__":
-    eval = True
+    eval = False
 
     if not eval:
 
-        
-        Seed = 42
-        UNIQUE_RUN_ID = str(uuid.uuid4())
+        Seed = 13
+        np.random.seed(Seed)
+        UNIQUE_RUN_ID = f'{Seed}' # there' an option to make a unique id with a utility function in utils.py
         make_directory_for_run(UNIQUE_RUN_ID)
 
-        data = pd.read_csv('data/train_processed.csv')
-        q_agent = QAgent(data=data, discount_rate=0.99)
-        train(q_agent, UNIQUE_RUN_ID, simulations=100001, learning_rate=0.5, episodes=5000, epsilon=0.9, discount_start=0, discount_end=100000, epsilon_decay_start=50000, epsilon_decay_end=100000, adaptive_discount=True, adapting_learning_rate=True, adaptive_epsilon=True, max_workers=8, multiprocessing=False, checkpoint_save_every=2000)
+        data = pd.read_csv('train.csv')
+        val_data = pd.read_csv('val.csv')
+        q_agent = QAgent(data=data, val_data=val_data, discount_rate=0.99999)
+        train(q_agent, UNIQUE_RUN_ID, 
+            simulations=100001, 
+            learning_rate=0.1, 
+            episodes=2688,
+            epsilon=1, 
+
+            adaptive_discount=True, 
+            adapting_learning_rate=True, 
+            adaptive_epsilon=True,
+
+            discount_start=0, 
+            discount_end=100000,
+
+            epsilon_decay_start=80000, 
+            epsilon_decay_end=100000,
+
+            alr_start=0, 
+            alr_factor=200,
+            alr_val=0.1,
+
+            phase_bins=[0, 20001, 40001, 60001, 80001, 100001],
+
+            max_workers=8, 
+            multiprocessing=False, 
+            checkpoint_save_every=10)
 
     else:
 
-        list_of_files = glob.glob('./runs/*') # * means all if need specific format then *.csv
+        list_of_files = glob.glob('./runs/*')
+        list_of_files.sort(key=os.path.getctime)
         latest_folder = max(list_of_files, key=os.path.getctime)
 
         list_of_files = glob.glob(f'{latest_folder}/*')
@@ -314,4 +337,4 @@ if __name__ == "__main__":
         actions, cash, rewards, water_level = evaluate(trained_agent, val_data)
 
         df = pd.DataFrame({"prices": val_data["prices"], 'actions': actions, "cash": cash, "water_level": water_level, "rewards": rewards})
-        df.to_csv('data/eval_long.csv')
+        df.to_csv('evaluated_model.csv')
